@@ -5,6 +5,16 @@ const complaintSchema = new mongoose.Schema(
     title: String,
     description: String,
     category: String,
+    landmark: String,
+    area: String,
+    district: String,
+    state: String,
+    pincode: String,
+    location: String,
+    address: String,
+    photo: String,
+    priorityReason: String,
+    suggestedDepartment: String,
     status: {
     type: String,
     enum: ["Submitted", "Assigned", "In Progress", "Resolved", "Closed"],
@@ -23,7 +33,7 @@ const complaintSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ["Low", "Medium", "High"],
+      enum: ["Low", "Medium", "High", "Critical"],
       default: "Medium"
     },
     isEscalated: {

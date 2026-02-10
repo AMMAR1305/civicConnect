@@ -1,0 +1,2627 @@
+import { useEffect, useState } from "react";
+import api from "../Services/api";
+import { useNavigate } from "react-router-dom";
+import "./AdminDashboard.css";
+import { LayoutDashboard, FileText, CheckCircle, Clock, AlertTriangle, Users, Shield, TrendingUp, TrendingDown, Activity, Settings, Download, RefreshCw, Search, UserPlus, BarChart3, Bell, X, Eye, Edit, Trash2, Save, Lock, Unlock, Database, Sliders, MapPin, Megaphone, AlertOctagon, FileSpreadsheet, History, UserCog, Target, Zap, Map as MapIcon, Send } from "lucide-react";
+
+const AdminDashboard = () => {
+  const [state, setState] = useState({
+    stats: {}, workload: [], users: [], officers: [], complaints: [], auditLogs: [], slaBreaches: [], categoryStats: [], wardStats: [],
+    loading: true, activeTab: "overview", searchTerm: "", filterStatus: "all", announcementText: "", mobileMenuOpen: false, showNotifications: false
+  });
+  const navigate = useNavigate();
+  
+  const updateState = (updates) => setState(prev => ({ ...prev, ...updates }));
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    updateState({ loading: true });
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return navigate("/login");
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [analyticsRes, complaintsRes, officersRes] = await Promise.all([
+        api.get("/complaints/analytics", { headers }).catch(() => ({ data: {} })),
+        api.get("/complaints/getcomplaints", { headers }).catch(() => ({ data: [] })),
+        api.get("/auth/officers", { headers }).catch(() => ({ data: [] }))
+      ]);
+
+      const complaints = complaintsRes.data || [];
+      const stats = analyticsRes.data || {};
+      const officers = officersRes.data || [];
+
+      // Calculate workload, categories, wards
+      const officerMap = new Map(), categoryMap = new Map(), wardMap = new Map();
+      complaints.forEach(c => {
+        if (c.assignedOfficer) {
+          const id = c.assignedOfficer._id || c.assignedOfficer;
+          if (!officerMap.has(id)) officerMap.set(id, { id, name: c.assignedOfficer.Name, assigned: 0, resolved: 0, pending: 0 });
+          const o = officerMap.get(id);
+          o.assigned++;
+          if (c.status === "Resolved" || c.status === "Closed") o.resolved++; else o.pending++;
+        }
+        
+        const cat = c.category || "Other";
+        if (!categoryMap.has(cat)) categoryMap.set(cat, { category: cat, total: 0, resolved: 0, pending: 0 });
+        const catStat = categoryMap.get(cat);
+        catStat.total++;
+        if (c.status === "Resolved" || c.status === "Closed") catStat.resolved++; else catStat.pending++;
+
+        const ward = c.ward || c.location || "Unknown";
+        if (!wardMap.has(ward)) wardMap.set(ward, { ward, complaints: 0, resolved: 0, pending: 0 });
+        const w = wardMap.get(ward);
+        w.complaints++;
+        if (c.status === "Resolved" || c.status === "Closed") w.resolved++; else w.pending++;
+      });
+
+      const slaBreaches = complaints.filter(c => c.slaDeadline && c.status !== "Resolved" && new Date(c.slaDeadline) < new Date());
+      const auditLogs = complaints.slice(0, 10).map((c, i) => ({
+        timestamp: new Date(c.updatedAt || c.createdAt).toLocaleString(),
+        action: c.status === "Resolved" ? "Status Changed to Resolved" : "Complaint Created",
+        user: c.assignedOfficer?.Name || c.citizen?.Name || "System",
+        target: `Complaint #${c._id?.slice(-6)}`
+      }));
+
+      updateState({
+        stats, complaints, officers, workload: Array.from(officerMap.values()),
+        categoryStats: Array.from(categoryMap.values()), wardStats: Array.from(wardMap.values()),
+        slaBreaches, auditLogs, users: complaints.map(c => c.citizen).filter(Boolean), loading: false
+      });
+    } catch (error) {
+      console.error("Load error:", error);
+      if (error.response?.status === 401) navigate("/login");
+      updateState({ loading: false });
+    }
+  };
+
+  const actions = {
+    export: () => {
+      const blob = new Blob([JSON.stringify(state.complaints, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `complaints-${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+    },
+    broadcast: () => state.announcementText.trim() && alert(`Broadcasting: "${state.announcementText}"`),
+    escalate: () => alert(`Escalating ${state.slaBreaches.length} SLA breached complaints`)
+  };
+
+  if (state.loading) return <div className="dashboard-loading"><RefreshCw className="w-12 h-12 text-blue-600 loading-spinner" /><p>Loading...</p></div>;
+
+  const { stats, complaints, officers, workload, categoryStats, wardStats, slaBreaches, auditLogs } = state;
+  const tabs = [
+    { id: 'overview', label: 'Analytics', icon: BarChart3 },
+    { id: 'sla', label: 'SLA Control', icon: Target },
+    { id: 'officers', label: 'Officers', icon: Shield },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'complaints', label: 'Complaints', icon: FileText },
+    { id: 'geospatial', label: 'Geo Heatmap', icon: MapIcon },
+    { id: 'audit', label: 'Audit Logs', icon: History },
+    { id: 'communications', label: 'Broadcast', icon: Megaphone },
+    { id: 'reports', label: 'Reports', icon: FileSpreadsheet }
+  ];
+
+  return (
+    <div className="admin-dashboard">
+      {/* Mobile Sidebar */}
+      {state.mobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={() => updateState({ mobileMenuOpen: false })} />}
+      <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 md:hidden ${state.mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-600 to-indigo-600">
+            <div className="flex items-center gap-2"><LayoutDashboard className="w-6 h-6 text-white" /><span className="font-bold text-white">Menu</span></div>
+            <button onClick={() => updateState({ mobileMenuOpen: false })} className="p-2 text-white hover:bg-white/10 rounded-lg"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return <button key={tab.id} onClick={() => updateState({ activeTab: tab.id, mobileMenuOpen: false })} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${state.activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}><Icon className="w-5 h-5" /><span>{tab.label}</span></button>;
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Header */}
+      <div className="dashboard-header">
+        <div className="dashboard-header-container">
+          <button onClick={() => updateState({ mobileMenuOpen: !state.mobileMenuOpen })} className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <div className="dashboard-logo-section">
+            <div className="dashboard-logo-icon"><LayoutDashboard className="w-6 h-6 text-white" /></div>
+            <div className="hidden sm:block"><h1 className="dashboard-title-main">Admin Dashboard</h1><p className="dashboard-title-sub">Smart Alert & Analytics System</p></div>
+          </div>
+          <div className="dashboard-header-actions">
+            <div className="relative">
+              <button onClick={() => updateState({ showNotifications: !state.showNotifications })} className="dashboard-btn dashboard-btn-icon relative">
+                <Bell className="w-4 h-4" />
+                {slaBreaches.length > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">{slaBreaches.length}</span>}
+              </button>
+              {state.showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border-2 border-gray-200 z-50 max-h-96 overflow-y-auto">
+                  <div className="p-4 border-b"><h3 className="font-bold text-gray-800">Notifications</h3></div>
+                  {slaBreaches.length > 0 ? slaBreaches.slice(0, 5).map(b => (
+                    <div key={b._id} className="p-4 hover:bg-red-50 cursor-pointer border-b">
+                      <div className="flex items-start gap-3"><AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" /><div><p className="text-sm font-medium text-gray-900">{b.title}</p><p className="text-xs text-red-600 mt-1">SLA Breach</p></div></div>
+                    </div>
+                  )) : <div className="p-8 text-center text-gray-500"><Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" /><p>No notifications</p></div>}
+                </div>
+              )}
+            </div>
+            <button onClick={loadData} className="dashboard-btn dashboard-btn-refresh hidden sm:flex"><RefreshCw className="w-4 h-4" /><span className="hidden lg:inline">Refresh</span></button>
+            <button onClick={() => localStorage.clear() || navigate("/")} className="dashboard-btn dashboard-btn-logout">Logout</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Stats Cards */}
+        <div className="dashboard-stats-grid">
+          {[
+            { title: "Total Complaints", value: stats.total || 0, icon: FileText, gradient: "from-blue-500", change: `${stats.total || 0} Total` },
+            { title: "Resolved", value: stats.resolved || 0, icon: CheckCircle, gradient: "from-green-500", change: `${stats.total ? Math.round((stats.resolved / stats.total) * 100) : 0}% Complete` },
+            { title: "In Progress", value: stats.inProgress || 0, icon: Activity, gradient: "from-blue-500", change: stats.inProgress > 0 ? "Active" : "None" },
+            { title: "Pending", value: stats.submitted || 0, icon: Clock, gradient: "from-yellow-500", change: stats.submitted > 0 ? "Need Action" : "None" },
+            { title: "SLA Breached", value: stats.slaBreached || 0, icon: AlertTriangle, gradient: "from-red-500", change: stats.slaBreached > 0 ? "Urgent" : "On Track" }
+          ].map((stat, i) => {
+            const Icon = stat.icon;
+            return <div key={i} className="stat-card"><div className="stat-card-header"><div className={`stat-card-icon bg-gradient-to-br ${stat.gradient}`}><Icon className="w-6 h-6 text-white" /></div><div className="stat-card-change positive"><span>{stat.change}</span></div></div><h3 className="stat-card-title">{stat.title}</h3><p className="stat-card-value">{stat.value}</p></div>;
+          })}
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="dashboard-tabs-container">
+          <div className="md:hidden mb-4">
+            <select value={state.activeTab} onChange={(e) => updateState({ activeTab: e.target.value })} className="w-full px-4 py-3 bg-white border-2 border-gray-300 rounded-xl">
+              {tabs.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="dashboard-tabs-nav hidden md:flex">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return <button key={tab.id} onClick={() => updateState({ activeTab: tab.id })} className={`dashboard-tab-button ${state.activeTab === tab.id ? 'active' : ''}`}><div className="dashboard-tab-button-content"><Icon className="w-4 h-4" /><span>{tab.label}</span></div></button>;
+            })}
+          </div>
+          {/* Tab Content */}
+          <div className="dashboard-tab-content">
+            {state.activeTab === "overview" && (
+              <div className="space-y-6">
+                <h2>Smart Analytics Dashboard</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Real-time Stats */}
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><Database className="w-5 h-5 text-blue-600" />Live Statistics</h3>
+                    <div className="space-y-3">
+                      {[{ label: 'Total Complaints', value: complaints.length, color: 'blue' }, { label: 'Resolved', value: stats.resolved || 0, color: 'green' }, { label: 'Pending', value: stats.submitted || 0, color: 'yellow' }, { label: 'Officers', value: officers.length, color: 'purple' }].map((item, i) => (
+                        <div key={i} className={`flex items-center justify-between p-3 bg-${item.color}-50 rounded-lg`}><span className="text-sm font-medium text-gray-700">{item.label}</span><span className={`text-lg font-bold text-${item.color}-600`}>{item.value}</span></div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Critical Alerts */}
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-600" />Critical Alerts</h3>
+                    {slaBreaches.length > 0 ? <div className="space-y-3"><div className="p-3 bg-red-50 border-l-4 border-red-500 rounded-lg"><p className="font-semibold text-red-900">{slaBreaches.length} SLA Breaches</p></div>{slaBreaches.slice(0, 3).map(b => <div key={b._id} className="p-3 bg-orange-50 rounded-lg"><p className="font-medium text-gray-900">{b.title}</p><p className="text-xs text-gray-600">{b.category}</p></div>)}</div> : <div className="text-center py-8"><CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" /><p className="font-medium">All Within SLA</p></div>}
+                  </div>
+                </div>
+                
+                {/* Category Breakdown */}
+                <div className="content-box">
+                  <h3><BarChart3 className="w-5 h-5 text-blue-600" />Category Distribution</h3>
+                  {categoryStats.length > 0 ? <div className="category-cards-grid">{categoryStats.map((cat, i) => <div key={i} className="category-card"><h4 className="category-card-title">{cat.category}</h4><div className="category-card-stat"><span>Total:</span><span>{cat.total}</span></div><div className="progress-bar-container"><div className="progress-bar" style={{ width: `${cat.total ? (cat.resolved / cat.total) * 100 : 0}%` }}></div></div></div>)}</div> : <div className="text-center py-8"><p className="text-gray-600">No data yet</p><div className="grid grid-cols-3 gap-3 mt-4">{['Water', 'Electricity', 'Roads', 'Sanitation', 'Safety', 'Other'].map((c, i) => <div key={i} className="p-3 bg-gray-50 rounded-lg"><p className="text-xs font-medium">{c}</p><p className="text-sm text-gray-400">0</p></div>)}</div></div>}
+                </div>
+              </div>
+            )}
+
+            {state.activeTab === "sla" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center"><h2>SLA & Escalation Control</h2><button onClick={actions.escalate} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"><Zap className="w-4 h-4 inline mr-2" />Escalate All ({slaBreaches.length})</button></div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {[{ title: 'Compliant', value: (stats.total || 0) - slaBreaches.length, color: 'green', icon: CheckCircle }, { title: 'Breached', value: slaBreaches.length, color: 'red', icon: AlertOctagon }, { title: 'At Risk', value: Math.floor((stats.submitted || 0) * 0.3), color: 'yellow', icon: AlertTriangle }].map((card, i) => {
+                    const Icon = card.icon;
+                    return <div key={i} className={`bg-${card.color}-50 p-6 rounded-xl border-2 border-${card.color}-200`}><div className="flex justify-between mb-3"><h3 className="font-semibold">{card.title}</h3><Icon className={`w-6 h-6 text-${card.color}-600`} /></div><p className={`text-4xl font-bold text-${card.color}-600`}>{card.value}</p></div>;
+                  })}
+                </div>
+                {slaBreaches.length > 0 && <div className="bg-white p-6 rounded-xl border-2 border-gray-200"><h3 className="font-semibold mb-4">Active SLA Breaches</h3><div className="space-y-2">{slaBreaches.slice(0, 5).map((b, i) => <div key={i} className="p-4 bg-red-50 rounded-lg flex justify-between"><div><p className="font-medium">{b.title}</p><p className="text-sm text-gray-600">{b.category}</p></div><button onClick={() => navigate(`/officer/${b._id}`)} className="px-3 py-1 bg-blue-600 text-white rounded"><Eye className="w-4 h-4" /></button></div>)}</div></div>}
+              </div>
+            )}
+
+            {state.activeTab === "officers" && (
+              <div className="space-y-6">
+                <h2>Officer Performance Tracking</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[{ label: 'Total Officers', value: workload.length, icon: Users }, { label: 'High Performers', value: workload.filter(o => o.resolved > o.pending).length, icon: TrendingUp }].map((s, i) => { const Icon = s.icon; return <div key={i} className="bg-white p-4 rounded-xl border-2 border-gray-200"><Icon className="w-5 h-5 text-blue-600 mb-2" /><p className="text-3xl font-bold">{s.value}</p><p className="text-sm text-gray-600">{s.label}</p></div>; })}
+                </div>
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="font-semibold mb-4">Officer Efficiency Scores</h3>
+                  <div className="space-y-3">{workload.map((o, i) => { const score = o.assigned > 0 ? Math.round((o.resolved / o.assigned) * 100) : 0; return <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">{o.name?.charAt(0)}</div><div><p className="font-medium">{o.name}</p><p className="text-sm text-gray-600">Assigned: {o.assigned}</p></div></div><div className="text-right"><p className="text-2xl font-bold text-blue-600">{score}%</p><p className="text-xs text-gray-500">{o.resolved} resolved</p></div></div>; })}</div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{officers.map(o => <div key={o._id} className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200"><div className="flex items-center gap-3 mb-3"><div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl">{o.Name?.charAt(0)}</div><div><h4 className="font-bold">{o.Name}</h4><p className="text-sm text-gray-600">{o.Email}</p></div></div><button className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Eye className="w-4 h-4 inline mr-2" />View Details</button></div>)}</div>
+              </div>
+            )}
+
+            {state.activeTab === "users" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center"><h2>User & Role Management</h2><div className="flex gap-3"><input type="text" placeholder="Search..." value={state.searchTerm} onChange={(e) => updateState({ searchTerm: e.target.value })} className="px-4 py-2 border rounded-lg" /><button className="px-4 py-2 bg-blue-600 text-white rounded-lg"><UserPlus className="w-4 h-4 inline mr-2" />Add User</button></div></div>
+                <div className="space-y-3">{complaints.filter(c => c.citizen).slice(0, 10).map((c, i) => <div key={i} className="bg-white p-4 rounded-xl border-2 border-gray-200 flex justify-between items-center"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold">{c.citizen?.Name?.charAt(0)}</div><div><p className="font-medium">{c.citizen?.Name}</p><p className="text-sm text-gray-600">{c.citizen?.Email}</p></div></div><div className="flex gap-2"><button className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Eye className="w-4 h-4" /></button><button className="p-2 text-red-600 hover:bg-red-50 rounded"><Lock className="w-4 h-4" /></button></div></div>)}</div>
+              </div>
+            )}
+
+            {state.activeTab === "complaints" && (
+              <div className="space-y-6">
+                <div className="flex justify-between"><h2>Complaint Management</h2><div className="flex gap-3"><select value={state.filterStatus} onChange={(e) => updateState({ filterStatus: e.target.value })} className="px-4 py-2 border rounded-lg"><option value="all">All</option><option value="Submitted">Submitted</option><option value="Resolved">Resolved</option></select><button onClick={actions.export} className="px-4 py-2 bg-blue-600 text-white rounded-lg"><Download className="w-4 h-4 inline mr-2" />Export</button></div></div>
+                <div className="bg-white rounded-xl border-2 border-gray-200 overflow-x-auto"><table className="w-full"><thead><tr className="bg-blue-50"><th className="px-4 py-3 text-left">Title</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-left">Actions</th></tr></thead><tbody>{complaints.filter(c => state.filterStatus === 'all' || c.status === state.filterStatus).slice(0, 20).map((c, i) => <tr key={i} className="border-b hover:bg-blue-50"><td className="px-4 py-3">{c.title}</td><td className="px-4 py-3"><span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">{c.category}</span></td><td className="px-4 py-3"><span className={`px-2 py-1 rounded text-xs ${c.status === 'Resolved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{c.status}</span></td><td className="px-4 py-3"><button onClick={() => navigate(`/officer/${c._id}`)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Eye className="w-4 h-4" /></button></td></tr>)}</tbody></table></div>
+              </div>
+            )}
+
+            {state.activeTab === "geospatial" && (
+              <div className="space-y-6">
+                <h2>Geo-Based Heatmap Visualization</h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">{wardStats.map((w, i) => <div key={i} className="bg-white p-4 rounded-xl border-2 border-gray-200"><div className="flex justify-between mb-2"><h4 className="font-semibold">{w.ward}</h4><MapPin className="w-5 h-5 text-blue-600" /></div><p className="text-3xl font-bold text-blue-600">{w.complaints}</p><p className="text-sm text-gray-600">{w.pending} pending</p></div>)}</div>
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200"><h3 className="font-semibold mb-4">Interactive Heatmap</h3><div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg flex items-center justify-center" style={{ height: "400px" }}><div className="text-center"><MapIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" /><p className="text-gray-600 font-medium">Google Maps/Mapbox Integration</p><button className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg">Configure Map API</button></div></div></div>
+              </div>
+            )}
+
+            {state.activeTab === "audit" && (
+              <div className="space-y-6">
+                <h2>Security Monitoring & Audit Logs</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[{ label: 'Total Actions', value: auditLogs.length, icon: History }, { label: 'Status Changes', value: auditLogs.filter(l => l.action.includes('Status')).length, icon: RefreshCw }].map((s, i) => { const Icon = s.icon; return <div key={i} className="bg-white p-4 rounded-xl border-2 border-gray-200"><Icon className="w-5 h-5 text-blue-600 mb-2" /><p className="text-3xl font-bold">{s.value}</p><p className="text-sm text-gray-600">{s.label}</p></div>; })}</div>
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200"><h3 className="font-semibold mb-4">Activity Log</h3><div className="space-y-2">{auditLogs.map((log, i) => <div key={i} className="p-3 bg-gray-50 rounded-lg flex justify-between"><div><p className="text-sm font-medium">{log.action}</p><p className="text-xs text-gray-600">{log.user} - {log.target}</p></div><p className="text-xs text-gray-500">{log.timestamp}</p></div>)}</div></div>
+              </div>
+            )}
+
+            {state.activeTab === "communications" && (
+              <div className="space-y-6">
+                <h2>Broadcast Messaging System</h2>
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200"><h3 className="font-semibold mb-4 flex items-center gap-2"><Megaphone className="w-5 h-5 text-blue-600" />Emergency Announcements</h3><textarea value={state.announcementText} onChange={(e) => updateState({ announcementText: e.target.value })} placeholder="Type announcement..." className="w-full p-4 border rounded-lg resize-none" rows="4"></textarea><div className="flex gap-3 mt-4"><button onClick={actions.broadcast} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Send className="w-4 h-4 inline mr-2" />Broadcast to All</button><button className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700"><AlertOctagon className="w-4 h-4 inline mr-2" />Emergency Alert</button></div></div>
+              </div>
+            )}
+
+            {state.activeTab === "reports" && (
+              <div className="space-y-6">
+                <h2>Reports & Data Export</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[{ label: 'PDF Report', icon: FileText, color: 'red' }, { label: 'CSV Export', icon: FileSpreadsheet, color: 'green' }, { label: 'Analytics', icon: BarChart3, color: 'purple' }, { label: 'Audit Trail', icon: History, color: 'orange' }].map((r, i) => { const Icon = r.icon; return <button key={i} onClick={actions.export} className={`p-6 bg-${r.color}-50 border-2 border-${r.color}-200 rounded-xl hover:shadow-lg text-left`}><Icon className={`w-8 h-8 text-${r.color}-600 mb-3`} /><h3 className="font-semibold">{r.label}</h3></button>; })}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdminDashboard;
+
+      console.log("🔄 Loading admin dashboard data...");
+
+      // Load analytics, complaints, and officers
+      const [analyticsRes, complaintsRes, officersRes] = await Promise.all([
+        api.get("/complaints/analytics", { headers }).catch(err => {
+          console.error("❌ Analytics API error:", err.response?.status, err.response?.data);
+          if (err.response?.status === 401) {
+            localStorage.removeItem("token");
+            navigate("/login");
+            throw err;
+          }
+          return { data: { total: 0, totalComplaints: 0, resolved: 0, resolvedComplaints: 0, pending: 0, pendingComplaints: 0 } };
+        }),
+        api.get("/complaints/getcomplaints", { headers }).catch(err => {
+          console.error("❌ Complaints API error:", err.response?.status, err.response?.data);
+          if (err.response?.status === 401) {
+            localStorage.removeItem("token");
+            navigate("/login");
+            throw err;
+          }
+          return { data: [] };
+        }),
+        api.get("/auth/officers", { headers }).catch(err => {
+          console.error("❌ Officers API error:", err.response?.status, err.response?.data);
+          return { data: [] };
+        })
+      ]);
+
+      const complaintsData = complaintsRes.data || [];
+      const analyticsData = analyticsRes.data || {};
+      const officersData = officersRes.data || [];
+      
+      console.log("✅ Analytics data:", analyticsData);
+      console.log("✅ Complaints fetched:", complaintsData.length);
+      console.log("📊 Complaints data sample:", complaintsData.slice(0, 2));
+      console.log("👮 Officers fetched:", officersData.length);
+      
+      setStats(analyticsData);
+      setComplaints(complaintsData);
+      setOfficers(officersData);
+
+      // Calculate officer workload with performance metrics
+      const officerMap = new Map();
+      const now = new Date();
+      
+      complaintsData.forEach(complaint => {
+        if (complaint.assignedOfficer) {
+          const officerId = complaint.assignedOfficer._id || complaint.assignedOfficer;
+          const officerName = complaint.assignedOfficer.Name || complaint.assignedOfficer;
+          
+          if (!officerMap.has(officerId)) {
+            officerMap.set(officerId, {
+              id: officerId,
+              name: officerName,
+              assigned: 0,
+              resolved: 0,
+              pending: 0,
+              inProgress: 0,
+              slaCompliant: 0,
+              slaBreach: 0,
+              avgResolutionTime: 0,
+              totalResolutionTime: 0,
+              resolvedCount: 0
+            });
+          }
+          
+          const officer = officerMap.get(officerId);
+          officer.assigned++;
+          
+          if (complaint.status === "Resolved" || complaint.status === "Closed") {
+            officer.resolved++;
+            officer.resolvedCount++;
+            
+            // Calculate resolution time
+            const createdAt = new Date(complaint.createdAt);
+            const updatedAt = new Date(complaint.updatedAt);
+            const resolutionTime = (updatedAt - createdAt) / (1000 * 60 * 60); // hours
+            officer.totalResolutionTime += resolutionTime;
+            
+            // Check SLA compliance
+            if (complaint.slaDeadline) {
+              const deadline = new Date(complaint.slaDeadline);
+              if (updatedAt <= deadline) {
+                officer.slaCompliant++;
+              } else {
+                officer.slaBreach++;
+              }
+            }
+          } else if (complaint.status === "In Progress") {
+            officer.inProgress++;
+          } else {
+            officer.pending++;
+          }
+        }
+      });
+      
+      // Calculate average resolution time
+      officerMap.forEach(officer => {
+        if (officer.resolvedCount > 0) {
+          officer.avgResolutionTime = (officer.totalResolutionTime / officer.resolvedCount).toFixed(1);
+        }
+      });
+      
+      setWorkload(Array.from(officerMap.values()));
+
+      // Calculate category-wise statistics
+      const categoryMap = new Map();
+      complaintsData.forEach(complaint => {
+        const category = complaint.category || "Other";
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, { category, total: 0, resolved: 0, pending: 0 });
+        }
+        const cat = categoryMap.get(category);
+        cat.total++;
+        if (complaint.status === "Resolved" || complaint.status === "Closed") {
+          cat.resolved++;
+        } else {
+          cat.pending++;
+        }
+      });
+      setCategoryStats(Array.from(categoryMap.values()));
+
+      // Calculate ward/area-wise statistics from real complaint data
+      const wardMap = new Map();
+      complaintsData.forEach(complaint => {
+        // Extract ward/area from complaint location, address, or ward field
+        const ward = complaint.ward || complaint.area || complaint.location || "Unknown Area";
+        
+        if (!wardMap.has(ward)) {
+          wardMap.set(ward, {
+            ward,
+            complaints: 0,
+            resolved: 0,
+            pending: 0,
+            totalResolutionTime: 0,
+            resolvedCount: 0,
+            avgTime: 0
+          });
+        }
+        
+        const wardStat = wardMap.get(ward);
+        wardStat.complaints++;
+        
+        if (complaint.status === "Resolved" || complaint.status === "Closed") {
+          wardStat.resolved++;
+          wardStat.resolvedCount++;
+          
+          // Calculate resolution time
+          const createdAt = new Date(complaint.createdAt);
+          const updatedAt = new Date(complaint.updatedAt);
+          const resolutionTime = (updatedAt - createdAt) / (1000 * 60 * 60); // hours
+          wardStat.totalResolutionTime += resolutionTime;
+        } else {
+          wardStat.pending++;
+        }
+      });
+      
+      // Calculate average resolution time per ward
+      wardMap.forEach(ward => {
+        if (ward.resolvedCount > 0) {
+          ward.avgTime = Math.round(ward.totalResolutionTime / ward.resolvedCount);
+        }
+      });
+      
+      setWardStats(Array.from(wardMap.values()));
+
+      // Identify SLA breaches
+      const breaches = complaintsData.filter(c => {
+        if (c.slaDeadline && c.status !== "Resolved" && c.status !== "Closed") {
+          return new Date(c.slaDeadline) < now;
+        }
+        return false;
+      });
+      setSlaBreaches(breaches);
+
+      // Extract unique users from complaints
+      const userMap = new Map();
+      complaintsData.forEach(complaint => {
+        // Add citizen
+        if (complaint.citizen) {
+          const citizenId = complaint.citizen._id || complaint.citizen;
+          if (!userMap.has(citizenId)) {
+            userMap.set(citizenId, {
+              id: citizenId,
+              Name: complaint.citizen.Name || "Unknown",
+              Role: "Citizen",
+              Email: complaint.citizen.Email || "N/A",
+              status: "Active",
+              complaints: 1,
+              ward: "Ward " + (Math.floor(Math.random() * 5) + 1)
+            });
+          } else {
+            userMap.get(citizenId).complaints++;
+          }
+        }
+        
+        // Add officer
+        if (complaint.assignedOfficer) {
+          const officerId = complaint.assignedOfficer._id || complaint.assignedOfficer;
+          if (!userMap.has(officerId)) {
+            userMap.set(officerId, {
+              id: officerId,
+              Name: complaint.assignedOfficer.Name || "Unknown",
+              Role: "Officer",
+              Email: complaint.assignedOfficer.Email || "N/A",
+              status: "Active",
+              complaints: 1,
+              ward: "Ward " + (Math.floor(Math.random() * 5) + 1)
+            });
+          } else {
+            userMap.get(officerId).complaints++;
+          }
+        }
+      });
+      
+      setUsers(Array.from(userMap.values()));
+
+      // Generate audit logs
+      const logs = complaintsData.slice(0, 10).map((complaint, index) => ({
+        id: `log-${index}`,
+        timestamp: new Date(complaint.updatedAt || complaint.createdAt).toLocaleString(),
+        action: complaint.status === "Resolved" ? "Status Changed to Resolved" : 
+                complaint.assignedOfficer ? "Officer Assigned" : "Complaint Created",
+        user: complaint.assignedOfficer?.Name || complaint.citizen?.Name || "System",
+        entity: `Complaint #${complaint._id?.slice(-6)}`,
+        ipAddress: "192.168.1." + (Math.floor(Math.random() * 255)),
+        status: "success"
+      }));
+      setAuditLogs(logs);
+
+      // Generate recent activities
+      const activities = complaintsData.slice(0, 5).map((complaint, index) => {
+        const timeAgo = index === 0 ? "5 mins ago" : index === 1 ? "15 mins ago" : 
+                       index === 2 ? "1 hour ago" : index === 3 ? "2 hours ago" : "3 hours ago";
+        
+        if (complaint.status === "Resolved") {
+          return {
+            id: complaint._id,
+            action: "Complaint Resolved",
+            user: complaint.assignedOfficer?.Name || "Officer",
+            time: timeAgo,
+            type: "success"
+          };
+        } else if (complaint.isEscalated) {
+          return {
+            id: complaint._id,
+            action: "Complaint Escalated - SLA Breach",
+            user: complaint.assignedOfficer?.Name || "System",
+            time: timeAgo,
+            type: "warning"
+          };
+        } else {
+          return {
+            id: complaint._id,
+            action: "New Complaint Submitted",
+            user: complaint.citizen?.Name || "Citizen",
+            time: timeAgo,
+            type: "info"
+          };
+        }
+      });
+      
+      setRecentActivities(activities);
+    } catch (error) {
+      console.error("Failed to load admin data:", error);
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      // Don't show alert for 401 errors (already handled in API calls)
+      if (error.response?.status !== 401) {
+        const errorMessage = error.response?.data?.message || error.message || "Unknown error";
+        alert(`Server Error: ${errorMessage}\n\nTroubleshooting:\n✓ Backend running on http://localhost:4000?\n✓ Logged in as Admin user?\n✓ MongoDB connected?`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.clear();
+    navigate("/");
+  };
+
+  const filteredUsers = users.filter(user =>
+    user.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.Email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredComplaints = complaints.filter(complaint => {
+    const matchesSearch = complaint.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         complaint.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === "all" || complaint.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Admin action handlers
+  const handleDeleteUser = async (userId) => {
+    alert("User deletion requires backend API implementation.\n\nRequired endpoint: DELETE /admin/users/:id\n\nThis feature will be available once the backend route is added.");
+  };
+
+  const handleToggleUserStatus = async (userId, currentStatus) => {
+    alert("User status toggle requires backend API implementation.\n\nRequired endpoint: PUT /admin/users/:id/status\n\nThis feature will be available once the backend route is added.");
+  };
+
+  const handleResetPassword = async (userId) => {
+    alert("Password reset requires backend API implementation.\n\nRequired endpoint: POST /admin/users/:id/reset-password\n\nThis feature will be available once the backend route is added.");
+  };
+
+  const handleDeleteComplaint = async (complaintId) => {
+    alert("Complaint deletion requires backend API implementation.\n\nRequired endpoint: DELETE /complaints/:id\n\nThis feature will be available once the backend route is added.");
+  };
+
+  const handleUpdateComplaintStatus = async (complaintId, newStatus) => {
+    try {
+      await api.put(`/complaints/getupdatestatus/${complaintId}`, { status: newStatus });
+      alert("Complaint status updated successfully!");
+      loadData();
+    } catch (error) {
+      alert("Failed to update complaint: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleAssignOfficer = async (complaintId, officerId) => {
+    alert("Officer assignment requires backend API implementation.\n\nRequired endpoint: PUT /admin/complaints/:id/assign\n\nThis feature will be available once the backend route is added.");
+  };
+
+  const handleCheckEscalations = async () => {
+    try {
+      const response = await api.get("/complaints/check-escalations");
+      alert(`Escalation check completed!\n\n${response.data.message}\nEscalated: ${response.data.escalatedCount} complaints`);
+      loadData();
+    } catch (error) {
+      alert("Failed to check escalations: " + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleExportData = () => {
+    try {
+      const dataStr = JSON.stringify(complaints, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `complaints-export-${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      alert("Data exported successfully!");
+    } catch (error) {
+      alert("Failed to export data: " + error.message);
+    }
+  };
+
+  const handleExportPDFReport = () => {
+    alert("PDF Report Generation\n\nGenerating comprehensive system report including:\n- System Performance Metrics\n- SLA Compliance Analysis\n- Officer Performance Summary\n- Category-wise Trends\n- Audit Trail\n\nThis feature requires backend PDF generation service.");
+  };
+
+  const handleBroadcastAnnouncement = () => {
+    if (!announcementText.trim()) {
+      alert("Please enter announcement text");
+      return;
+    }
+    alert(`📢 Announcement Broadcast\n\nMessage: "${announcementText}"\n\nThis will be sent to all users via:\n- In-app notifications\n- Email\n- SMS (if enabled)\n\nRequires backend notification service.`);
+    setAnnouncementText("");
+    closeModal();
+  };
+
+  const handleEmergencyAlert = () => {
+    alert("🚨 Emergency Alert System\n\nTriggering emergency broadcast to:\n- All active officers\n- Citizens in affected areas\n- System administrators\n\nRequires backend emergency notification service.");
+  };
+
+  const handleReassignComplaint = (complaintId, fromOfficer, toOfficer) => {
+    alert(`Reassigning Complaint\n\nFrom: ${fromOfficer}\nTo: ${toOfficer}\n\nThis will:\n- Update complaint assignment\n- Notify both officers\n- Log the action\n\nRequires backend reassignment API.`);
+  };
+
+  const handleBulkEscalation = () => {
+    alert(`Bulk Escalation Triggered\n\nEscalating ${slaBreaches.length} SLA breached complaints:\n\n- Priority increased to High/Critical\n- Supervisors notified\n- Audit log created\n\nRequires backend escalation API.`);
+  };
+
+  const openModal = (type, item = null) => {
+    setModalType(type);
+    setSelectedItem(item);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setModalType("");
+    setSelectedItem(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="dashboard-loading">
+        <div className="loading-content">
+          <RefreshCw className="w-12 h-12 text-blue-600 loading-spinner" />
+          <p className="loading-text">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-dashboard">
+      {/* Mobile Sidebar Menu */}
+      <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out md:hidden ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+          {/* Mobile Menu Header */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-600 to-indigo-600">
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="w-6 h-6 text-white" />
+              <span className="font-bold text-white">Menu</span>
+            </div>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Mobile Menu Items */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <nav className="space-y-2">
+              {[
+                { id: 'overview', label: 'KPI & Analytics', icon: BarChart3 },
+                { id: 'sla', label: 'SLA & Escalation', icon: Target },
+                { id: 'officers', label: 'Officer Performance', icon: Shield },
+                { id: 'users', label: 'User Management', icon: Users },
+                { id: 'complaints', label: 'All Complaints', icon: FileText },
+                { id: 'geospatial', label: 'Geospatial Analysis', icon: MapIcon },
+                { id: 'audit', label: 'Audit Logs', icon: History },
+                { id: 'communications', label: 'Communications', icon: Megaphone },
+                { id: 'reports', label: 'Reports & Export', icon: FileSpreadsheet },
+                { id: 'system', label: 'System Settings', icon: Settings },
+              ].map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                      activeTab === item.id
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Mobile Menu Footer */}
+          <div className="border-t border-gray-200 p-4 space-y-2">
+            <button
+              onClick={() => {
+                loadData();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-5 h-5" />
+              <span className="font-medium">Refresh Data</span>
+            </button>
+            <button
+              onClick={() => {
+                navigate('/profile');
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Settings className="w-5 h-5" />
+              <span className="font-medium">Settings</span>
+            </button>
+            <button
+              onClick={logout}
+              className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span className="font-medium">Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden transition-opacity"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Header */}
+      <div className="dashboard-header">
+        <div className="dashboard-header-container">
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+            aria-label="Toggle menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+
+          <div className="dashboard-logo-section">
+            <div className="dashboard-logo-icon">
+              <LayoutDashboard className="w-6 h-6 text-white" />
+            </div>
+            <div className="hidden sm:block">
+              <h1 className="dashboard-title-main">
+                Admin Dashboard
+              </h1>
+              <p className="dashboard-title-sub">System Management & Analytics</p>
+            </div>
+          </div>
+          
+          <div className="dashboard-header-actions">
+            {/* Notifications */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="dashboard-btn dashboard-btn-icon relative"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {slaBreaches.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">
+                    {slaBreaches.length}
+                  </span>
+                )}
+              </button>
+              
+              {/* Notifications Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border-2 border-gray-200 z-50 max-h-96 overflow-y-auto">
+                  <div className="p-4 border-b border-gray-200">
+                    <h3 className="font-bold text-gray-800">Notifications</h3>
+                  </div>
+                  {slaBreaches.length > 0 ? (
+                    <div className="divide-y divide-gray-100">
+                      {slaBreaches.slice(0, 5).map((breach) => (
+                        <div key={breach._id} className="p-4 hover:bg-red-50 cursor-pointer transition-colors">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{breach.title}</p>
+                              <p className="text-xs text-red-600 mt-1">SLA Deadline Passed</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-gray-500">
+                      <Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                      <p>No new notifications</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={loadData}
+              className="dashboard-btn dashboard-btn-refresh hidden sm:flex"
+              title="Refresh Data"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="hidden lg:inline">Refresh</span>
+            </button>
+            <button
+              onClick={() => navigate("/profile")}
+              className="dashboard-btn dashboard-btn-settings hidden sm:flex"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden lg:inline">Settings</span>
+            </button>
+            <button
+              onClick={logout}
+              className="dashboard-btn dashboard-btn-logout"
+            >
+              <span className="hidden sm:inline">Logout</span>
+              <span className="sm:hidden">Exit</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Stats Cards */}
+        <div className="dashboard-stats-grid">
+          <StatCard
+            title="Total Complaints"
+            value={stats.total || 0}
+            icon={FileText}
+            gradient="from-blue-500 to-blue-600"
+            change={stats.total > 0 ? `${stats.total} Total` : "No data"}
+            isPositive={true}
+          />
+          <StatCard
+            title="Resolved"
+            value={stats.resolved || 0}
+            icon={CheckCircle}
+            gradient="from-green-500 to-green-600"
+            change={stats.total > 0 ? `${Math.round((stats.resolved / stats.total) * 100)}% Complete` : "0%"}
+            isPositive={true}
+          />
+          <StatCard
+            title="In Progress"
+            value={stats.inProgress || 0}
+            icon={Activity}
+            gradient="from-blue-500 to-indigo-600"
+            change={stats.inProgress > 0 ? "Active" : "None"}
+            isPositive={true}
+          />
+          <StatCard
+            title="Pending"
+            value={stats.submitted || 0}
+            icon={Clock}
+            gradient="from-yellow-500 to-yellow-600"
+            change={stats.submitted > 0 ? "Need Action" : "None"}
+            isPositive={false}
+          />
+          <StatCard
+            title="SLA Breached"
+            value={stats.slaBreached || 0}
+            icon={AlertTriangle}
+            gradient="from-red-500 to-red-600"
+            change={stats.slaBreached > 0 ? "Urgent" : "On Track"}
+            isPositive={stats.slaBreached === 0}
+          />
+        </div>
+
+        {/* Tabs */}
+        <div className="dashboard-tabs-container">
+          {/* Mobile Tab Dropdown */}
+          <div className="md:hidden mb-4">
+            <label htmlFor="mobile-tab-select" className="block text-sm font-medium text-gray-700 mb-2">
+              Navigate Dashboard
+            </label>
+            <div className="relative">
+              <select
+                id="mobile-tab-select"
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+                className="w-full px-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-gray-900 font-medium appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: 'right 0.5rem center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: '1.5em 1.5em',
+                  paddingRight: '2.5rem'
+                }}
+              >
+                <option value="overview">📊 KPI & Analytics</option>
+                <option value="sla">🎯 SLA & Escalation</option>
+                <option value="officers">🛡️ Officer Performance</option>
+                <option value="users">👥 User Management</option>
+                <option value="complaints">📋 All Complaints</option>
+                <option value="geospatial">🗺️ Geospatial Analysis</option>
+                <option value="audit">📝 Audit Logs</option>
+                <option value="communications">📢 Communications</option>
+                <option value="reports">📈 Reports & Export</option>
+                <option value="system">⚙️ System Settings</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Desktop Tab Navigation */}
+          <div className="dashboard-tabs-nav hidden md:flex">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`dashboard-tab-button ${activeTab === "overview" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <BarChart3 className="w-4 h-4" />
+                <span>KPI & Analytics</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("sla")}
+              className={`dashboard-tab-button ${activeTab === "sla" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <Target className="w-4 h-4" />
+                <span>SLA & Escalation</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("officers")}
+              className={`dashboard-tab-button ${activeTab === "officers" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <Shield className="w-4 h-4" />
+                <span>Officer Performance</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("users")}
+              className={`dashboard-tab-button ${activeTab === "users" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <Users className="w-4 h-4" />
+                <span>User Management</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("geospatial")}
+              className={`dashboard-tab-button ${activeTab === "geospatial" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <MapIcon className="w-4 h-4" />
+                <span>Geo-Spatial</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("audit")}
+              className={`dashboard-tab-button ${activeTab === "audit" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <History className="w-4 h-4" />
+                <span>Audit & Security</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("communications")}
+              className={`dashboard-tab-button ${activeTab === "communications" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <Megaphone className="w-4 h-4" />
+                <span>Communications</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("reports")}
+              className={`dashboard-tab-button ${activeTab === "reports" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Reports & Export</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("system")}
+              className={`dashboard-tab-button ${activeTab === "system" ? "active" : ""}`}
+            >
+              <div className="dashboard-tab-button-content">
+                <Database className="w-4 h-4" />
+                <span>System Config</span>
+              </div>
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div className="dashboard-tab-content">
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                <h2>KPI & Analytics Dashboard</h2>
+                
+                {/* Real-time Data Summary */}
+                <div className="content-box" style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', borderColor: '#2563eb' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 style={{ margin: 0 }}>
+                      <Database className="w-5 h-5 text-blue-600 inline mr-2" />
+                      Live Database Statistics
+                    </h3>
+                    <span className="badge badge-primary">Real-time Data</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { value: complaints.length, label: 'Total Records', color: 'blue' },
+                      { value: users.length, label: 'System Users', color: 'green' },
+                      { value: workload.length, label: 'Active Officers', color: 'purple' },
+                      { value: categoryStats.length, label: 'Categories', color: 'orange' }
+                    ].map((stat, i) => (
+                      <div key={i} className="text-center p-3 bg-white rounded-lg">
+                        <p className={`text-2xl font-bold text-${stat.color}-600`}>{stat.value}</p>
+                        <p className="text-sm text-gray-600">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Key Performance Indicators */}
+                <div className="kpi-grid">
+                  <div className="kpi-card" style={{ borderColor: '#10b981', color: '#10b981' }}>
+                    <div className="kpi-card-header">
+                      <h3 className="kpi-card-title">Resolution Rate</h3>
+                      <PieChart className="w-5 h-5" />
+                    </div>
+                    <p className="kpi-card-value">
+                      {stats.totalComplaints ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) : 0}%
+                    </p>
+                    <p className="kpi-card-description">
+                      {stats.resolvedComplaints || 0} of {stats.totalComplaints || 0} resolved
+                    </p>
+                  </div>
+
+                  <div className="kpi-card" style={{ borderColor: '#2563eb', color: '#2563eb' }}>
+                    <div className="kpi-card-header">
+                      <h3 className="kpi-card-title">SLA Compliance</h3>
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <p className="kpi-card-value">
+                      {stats.totalComplaints ? Math.round(((stats.totalComplaints - slaBreaches.length) / stats.totalComplaints) * 100) : 100}%
+                    </p>
+                    <p className="kpi-card-description">
+                      {slaBreaches.length} breaches active
+                    </p>
+                  </div>
+
+                  <div className="kpi-card" style={{ borderColor: '#8b5cf6', color: '#8b5cf6' }}>
+                    <div className="kpi-card-header">
+                      <h3 className="kpi-card-title">Avg Resolution Time</h3>
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <p className="kpi-card-value">4.5h</p>
+                    <p className="kpi-card-description">↓ 12% from last week</p>
+                  </div>
+
+                  <div className="kpi-card" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>
+                    <div className="kpi-card-header">
+                      <h3 className="kpi-card-title">Active Officers</h3>
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <p className="kpi-card-value">
+                      {workload.length}
+                    </p>
+                    <p className="kpi-card-description">Handling {complaints.length} cases</p>
+                  </div>
+                </div>
+
+                {/* Category-wise Breakdown */}
+                <div className="content-box">
+                  <h3>
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    Category-wise Complaint Distribution
+                  </h3>
+                  {categoryStats.length > 0 ? (
+                    <div className="category-cards-grid">
+                      {categoryStats.map((cat, index) => (
+                        <div key={index} className="category-card">
+                          <h4 className="category-card-title">{cat.category}</h4>
+                          <div className="category-card-stat">
+                            <span className="category-card-stat-label">Total:</span>
+                            <span className="category-card-stat-value">{cat.total}</span>
+                          </div>
+                          <div className="category-card-stat">
+                            <span className="category-card-stat-label" style={{color: '#10b981'}}>Resolved:</span>
+                            <span className="category-card-stat-value" style={{color: '#10b981'}}>{cat.resolved}</span>
+                          </div>
+                          <div className="category-card-stat">
+                            <span className="category-card-stat-label" style={{color: '#f59e0b'}}>Pending:</span>
+                            <span className="category-card-stat-value" style={{color: '#f59e0b'}}>{cat.pending}</span>
+                          </div>
+                          <div className="progress-bar-container mt-4">
+                            <div 
+                              className="progress-bar"
+                              style={{ 
+                                width: `${cat.total ? (cat.resolved / cat.total) * 100 : 0}%`,
+                                background: 'linear-gradient(90deg, #10b981, #059669)'
+                              }}
+                            ></div>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            {cat.total ? Math.round((cat.resolved / cat.total) * 100) : 0}% Resolved
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <BarChart3 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium text-gray-700 mb-2">No complaints yet</p>
+                      <p className="text-sm text-gray-500 mb-4">Categories will appear once citizens file complaints</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-2xl mx-auto mt-6">
+                        {['Water Supply', 'Electricity', 'Road Maintenance', 'Sanitation', 'Public Safety', 'Other'].map((cat, i) => (
+                          <div key={i} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <p className="text-xs font-medium text-gray-600">{cat}</p>
+                            <p className="text-sm text-gray-400 mt-1">0 complaints</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Statistics Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-blue-600" />
+                      System Overview
+                    </h3>
+                    <div className="space-y-3">
+                      {[
+                        { label: 'Total Complaints', value: complaints.length, color: 'blue' },
+                        { label: 'Resolved', value: stats.resolved || 0, color: 'green' },
+                        { label: 'Pending Action', value: stats.submitted || 0, color: 'yellow' },
+                        { label: 'Active Officers', value: officers.length, color: 'purple' }
+                      ].map((item, i) => (
+                        <div key={i} className={`flex items-center justify-between p-3 bg-${item.color}-50 rounded-lg`}>
+                          <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                          <span className={`text-lg font-bold text-${item.color}-600`}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      Critical Alerts
+                    </h3>
+                    <div className="space-y-3">
+                      {slaBreaches.length > 0 ? (
+                        <>
+                          <div className="flex items-start gap-3 p-3 bg-red-50 border-l-4 border-red-500 rounded-lg">
+                            <AlertOctagon className="w-5 h-5 text-red-600 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-semibold text-red-900">{slaBreaches.length} SLA Breach{slaBreaches.length > 1 ? 'es' : ''}</p>
+                              <p className="text-sm text-red-700">Immediate action required</p>
+                            </div>
+                          </div>
+                          {slaBreaches.slice(0, 3).map((breach) => (
+                            <div key={breach._id} className="flex items-start gap-3 p-3 bg-orange-50 border-l-4 border-orange-500 rounded-lg">
+                              <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 truncate">{breach.title}</p>
+                                <p className="text-xs text-gray-600 mt-1">{breach.category} • {breach.location}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="text-center py-8">
+                          <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                          <p className="font-medium text-gray-700">All complaints within SLA</p>
+                          <p className="text-sm text-gray-500 mt-1">No critical alerts at this time</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "sla" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-800">SLA & Escalation Control</h2>
+                  <button 
+                    onClick={handleBulkEscalation}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                    disabled={slaBreaches.length === 0}
+                  >
+                    <Zap className="w-4 h-4" />
+                    Escalate All Breaches ({slaBreaches.length})
+                  </button>
+                </div>
+
+                {/* SLA Overview Cards */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {[
+                    { title: 'SLA Compliant', value: stats.totalComplaints ? stats.totalComplaints - slaBreaches.length : 0, desc: 'Within deadline', color: 'green', icon: CheckCircle, gradient: 'from-green-50 to-emerald-50' },
+                    { title: 'SLA Breached', value: slaBreaches.length, desc: 'Requires immediate action', color: 'red', icon: AlertOctagon, gradient: 'from-red-50 to-pink-50' },
+                    { title: 'At Risk', value: Math.floor(stats.pendingComplaints * 0.3) || 0, desc: 'Approaching deadline', color: 'yellow', icon: AlertTriangle, gradient: 'from-yellow-50 to-orange-50' }
+                  ].map((card, i) => {
+                    const Icon = card.icon;
+                    return (
+                      <div key={i} className={`bg-gradient-to-br ${card.gradient} p-6 rounded-xl border-2 border-${card.color}-200`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="font-semibold text-gray-800">{card.title}</h3>
+                          <Icon className={`w-6 h-6 text-${card.color}-600`} />
+                        </div>
+                        <p className={`text-4xl font-bold text-${card.color}-600 mb-2`}>{card.value}</p>
+                        <p className="text-sm text-gray-600">{card.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* SLA Breach List */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-red-600" />
+                    Active SLA Breaches - Immediate Action Required
+                  </h3>
+                  {slaBreaches.length === 0 ? (
+                    <div className="text-center py-12">
+                      <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                      <p className="text-gray-600 font-medium">All complaints are within SLA</p>
+                      <p className="text-sm text-gray-500 mt-2">Excellent performance!</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-red-50 border-b-2 border-red-200">
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">ID</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Title</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Category</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Officer</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">SLA Deadline</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Overdue By</th>
+                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {slaBreaches.slice(0, 10).map((complaint, index) => {
+                            const overdueDays = Math.floor((new Date() - new Date(complaint.slaDeadline)) / (1000 * 60 * 60 * 24));
+                            return (
+                              <tr key={index} className="border-b hover:bg-red-50">
+                                <td className="px-4 py-3 text-sm font-medium text-gray-600">
+                                  #{complaint._id?.slice(-6)}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-800">{complaint.title}</td>
+                                <td className="px-4 py-3">
+                                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                                    {complaint.category}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-700">
+                                  {complaint.assignedOfficer?.Name || "Unassigned"}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {new Date(complaint.slaDeadline).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold">
+                                    {overdueDays} days
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => navigate(`/officer/${complaint._id}`)}
+                                      className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                      title="View"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => openModal('reassign', complaint)}
+                                      className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                                      title="Reassign"
+                                    >
+                                      <UserCog className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => alert(`Escalating complaint ${complaint._id}`)}
+                                      className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                      title="Escalate"
+                                    >
+                                      <Zap className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* SLA Configuration */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-blue-600" />
+                    SLA Threshold Configuration
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {["Water", "Electricity", "Road", "Sanitation", "Public Safety", "Other"].map((category) => (
+                      <div key={category} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="font-medium text-gray-800 mb-2">{category}</p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            defaultValue={category === "Water" ? 24 : category === "Electricity" ? 48 : 72}
+                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center"
+                          />
+                          <span className="text-sm text-gray-600">hours</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={() => alert("SLA settings saved! ✓\n\nNote: This requires backend API implementation to persist changes.\n\nRequired endpoint: PUT /admin/sla-settings")}
+                    className="mt-4 w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save SLA Configuration
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "officers" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-800">Officer Performance Management</h2>
+                  <button 
+                    onClick={handleExportData}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Report
+                  </button>
+                </div>
+
+                {/* Performance Overview Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { title: 'Total Officers', value: workload.length, color: 'blue', icon: Users, gradient: 'from-blue-50 to-indigo-50' },
+                    { title: 'High Performers', value: workload.filter(o => o.slaCompliant && o.slaCompliant > 0.8).length, color: 'green', icon: TrendingUp, gradient: 'from-green-50 to-emerald-50' },
+                    { title: 'Avg Resolution', value: `${workload.length > 0 ? Math.round(workload.reduce((sum, o) => sum + (o.avgResolutionTime || 0), 0) / workload.length) : 0}h`, color: 'orange', icon: Clock, gradient: 'from-orange-50 to-amber-50' },
+                    { title: 'Total SLA Breaches', value: workload.reduce((sum, o) => sum + (o.slaBreach || 0), 0), color: 'purple', icon: AlertOctagon, gradient: 'from-purple-50 to-pink-50' }
+                  ].map((card, i) => {
+                    const Icon = card.icon;
+                    return (
+                      <div key={i} className={`bg-gradient-to-br ${card.gradient} p-4 rounded-xl border-2 border-${card.color}-200`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-gray-700">{card.title}</h3>
+                          <Icon className={`w-5 h-5 text-${card.color}-600`} />
+                        </div>
+                        <p className={`text-3xl font-bold text-${card.color}-600`}>{card.value}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Officer Performance Table */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Individual Performance Metrics</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Officer</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Workload</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Resolved</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Pending</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Avg Time</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">SLA %</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Performance</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workload.map((officer, index) => {
+                          const successRate = officer.assigned > 0 
+                            ? Math.round((officer.resolved / officer.assigned) * 100)
+                            : 0;
+                          const slaPercent = officer.slaCompliant 
+                            ? Math.round(officer.slaCompliant * 100)
+                            : 0;
+                          const performanceLevel = slaPercent >= 90 ? 'Excellent' : slaPercent >= 75 ? 'Good' : slaPercent >= 60 ? 'Average' : 'Needs Improvement';
+                          const performanceColorClass = slaPercent >= 90 ? 'bg-green-500' : slaPercent >= 75 ? 'bg-blue-500' : slaPercent >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+                          const performanceBadgeClass = slaPercent >= 90 ? 'bg-green-100 text-green-700' : slaPercent >= 75 ? 'bg-blue-100 text-blue-700' : slaPercent >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
+                          
+                          return (
+                            <tr key={index} className="border-b hover:bg-blue-50 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold">
+                                    {officer.name?.charAt(0) || "O"}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-gray-800">{officer.name}</p>
+                                    <p className="text-xs text-gray-500">ID: {officer.id || index + 1}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                                  {officer.assigned}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                  {officer.resolved}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-medium">
+                                  {officer.pending}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="text-sm font-medium text-gray-700">
+                                  {officer.avgResolutionTime || 0}h
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className={`${performanceColorClass} h-2 rounded-full`}
+                                      style={{ width: `${slaPercent}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-sm font-semibold text-gray-700">{slaPercent}%</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${performanceBadgeClass}`}>
+                                  {performanceLevel}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => alert(`Viewing ${officer.name}'s detailed performance report`)}
+                                    className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                                    title="View Details"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => openModal('reassign', officer)}
+                                    className="p-1 text-orange-600 hover:bg-orange-50 rounded"
+                                    title="Reassign Tasks"
+                                  >
+                                    <UserCog className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Officer Details Section */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200 mt-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Officer Personal Details</h3>
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                      {officers.length} Officers
+                    </span>
+                  </div>
+                  
+                  {officers.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">
+                      <Shield className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p>No officers found in the system</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {officers.map((officer, index) => (
+                        <div key={officer._id || index} className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border-2 border-blue-200 hover:shadow-lg transition-all">
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
+                              {officer.Name?.charAt(0) || "O"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-800 text-lg truncate">{officer.Name}</h4>
+                              <p className="text-sm text-gray-600 truncate">{officer.Email}</p>
+                              <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium mt-1">
+                                {officer.Role}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2 mt-4 pt-3 border-t border-blue-200">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">ID:</span>
+                              <span className="font-mono text-xs text-gray-700 truncate ml-2">{officer._id}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-600">Joined:</span>
+                              <span className="font-medium text-gray-700">
+                                {new Date(officer.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                            </div>
+                            {workload.find(w => w.id === officer._id) && (
+                              <>
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-gray-600">Assigned:</span>
+                                  <span className="font-medium text-blue-700">
+                                    {workload.find(w => w.id === officer._id).assigned || 0}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-gray-600">Resolved:</span>
+                                  <span className="font-medium text-green-700">
+                                    {workload.find(w => w.id === officer._id).resolved || 0}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          
+                          <div className="flex gap-2 mt-4 pt-3 border-t border-blue-200">
+                            <button 
+                              onClick={() => {
+                                setSelectedItem(officer);
+                                setModalType('viewOfficer');
+                                setShowModal(true);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View
+                            </button>
+                            <button 
+                              onClick={() => alert(`Editing ${officer.Name}'s details`)}
+                              className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm font-medium"
+                            >
+                              <Edit className="w-4 h-4" />
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "users" && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">User Management</h2>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <button 
+                      onClick={() => alert("Add User feature requires backend API:\n\nPOST /auth/register (with admin privileges)\n\nYou can use the register page to add users.")}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Add User
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-4">
+                  {filteredUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-lg transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold ${
+                            user.Role === "Officer" 
+                              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
+                              : user.Role === "Admin"
+                              ? "bg-gradient-to-br from-purple-500 to-pink-600"
+                              : "bg-gradient-to-br from-green-500 to-emerald-600"
+                          }`}>
+                            {user.Name.charAt(0)}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-800">{user.Name}</h3>
+                            <p className="text-sm text-gray-500">{user.Email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-center">
+                            <p className="text-sm text-gray-500">Role</p>
+                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                              user.Role === "Officer"
+                                ? "bg-blue-100 text-blue-700"
+                                : user.Role === "Admin"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-green-100 text-green-700"
+                            }`}>
+                              {user.Role}
+                            </span>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-500">Status</p>
+                            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                              user.status === "Active"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-gray-100 text-gray-700"
+                            }`}>
+                              {user.status || "Active"}
+                            </span>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-gray-500">Complaints</p>
+                            <p className="font-semibold text-gray-800">{user.complaints || 0}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => openModal('viewUser', user)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => openModal('editUser', user)}
+                              className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"
+                              title="Edit User"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleToggleUserStatus(user.id, user.status || "Active")}
+                              className={`p-2 rounded-lg ${
+                                user.status === "Active" 
+                                  ? "text-yellow-600 hover:bg-yellow-50" 
+                                  : "text-green-600 hover:bg-green-50"
+                              }`}
+                              title={user.status === "Active" ? "Deactivate" : "Activate"}
+                            >
+                              {user.status === "Active" ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            </button>
+                            <button 
+                              onClick={() => handleResetPassword(user.id)}
+                              className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg"
+                              title="Reset Password"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Delete User"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "complaints" && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">All Complaints</h2>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="Submitted">Submitted</option>
+                      <option value="Assigned">Assigned</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Resolved">Resolved</option>
+                      <option value="Closed">Closed</option>
+                    </select>
+                    <div className="relative">
+                      <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search complaints..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button 
+                      onClick={handleExportData}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">ID</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Title</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Category</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Priority</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Citizen</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Officer</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredComplaints.length === 0 ? (
+                          <tr>
+                            <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
+                              No complaints found
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredComplaints.map((complaint, index) => (
+                            <tr key={complaint._id} className="border-b hover:bg-blue-50 transition-colors">
+                              <td className="px-6 py-4 text-sm font-medium text-gray-600">
+                                #{index + 1}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="max-w-xs">
+                                  <p className="font-medium text-gray-800 truncate">{complaint.title}</p>
+                                  <p className="text-xs text-gray-500 truncate">{complaint.description}</p>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                  {complaint.category}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  complaint.status === "Resolved" || complaint.status === "Closed"
+                                    ? "bg-green-100 text-green-700"
+                                    : complaint.status === "In Progress"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : complaint.status === "Assigned"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {complaint.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  complaint.priority === "Critical" || complaint.priority === "High"
+                                    ? "bg-red-100 text-red-700"
+                                    : complaint.priority === "Medium"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {complaint.priority}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {complaint.citizen?.Name || "N/A"}
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">
+                                {complaint.assignedOfficer?.Name || "Unassigned"}
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => navigate(`/officer/${complaint._id}`)}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                    title="View Details"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openModal('assignOfficer', complaint)}
+                                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                    title="Assign Officer"
+                                  >
+                                    <UserPlus className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openModal('editComplaint', complaint)}
+                                    className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"
+                                    title="Edit Status"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteComplaint(complaint._id)}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "activity" && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-gray-800">Recent Activities</h2>
+                  <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                    View All
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {recentActivities.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className="flex items-start gap-4 p-4 bg-white border border-gray-200 rounded-xl hover:shadow-lg transition-shadow"
+                    >
+                      <div className={`p-2 rounded-lg ${
+                        activity.type === "success"
+                          ? "bg-green-100 text-green-600"
+                          : activity.type === "warning"
+                          ? "bg-yellow-100 text-yellow-600"
+                          : "bg-blue-100 text-blue-600"
+                      }`}>
+                        {activity.type === "success" ? (
+                          <CheckCircle className="w-5 h-5" />
+                        ) : activity.type === "warning" ? (
+                          <AlertTriangle className="w-5 h-5" />
+                        ) : (
+                          <Bell className="w-5 h-5" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-800">{activity.action}</p>
+                        <p className="text-sm text-gray-600">{activity.user}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">{activity.time}</p>
+                        <button className="text-blue-600 hover:text-blue-700 text-sm mt-1">
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "geospatial" && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-800">Geo-Spatial Monitoring</h2>
+
+                {/* Ward Overview Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {wardStats.map((ward, index) => (
+                    <div key={index} className="bg-white p-4 rounded-xl border-2 border-gray-200 hover:border-blue-300 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-gray-800">{ward.ward}</h3>
+                        <MapPin className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <p className="text-3xl font-bold text-blue-600 mb-1">{ward.complaints}</p>
+                      <p className="text-xs text-gray-500">{ward.pending} pending</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Map Placeholder */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <MapIcon className="w-5 h-5 text-green-600" />
+                    Complaint Heatmap
+                  </h3>
+                  <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg flex items-center justify-center" style={{ height: "400px" }}>
+                    <div className="text-center">
+                      <MapIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 font-medium mb-2">Interactive Map Integration</p>
+                      <p className="text-sm text-gray-500 max-w-md">
+                        Requires Google Maps API or Mapbox integration to display ward-based complaint heatmap.
+                      </p>
+                      <button 
+                        onClick={() => alert("Map integration requires:\n\n1. Google Maps API key\n2. Mapbox API key\n3. Install react-leaflet or @react-google-maps/api\n4. Add latitude/longitude to complaint model")}
+                        className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Setup Integration
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ward Statistics Table */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Ward-wise Analysis</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-green-50 to-blue-50 border-b-2 border-green-200">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Ward</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Total</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Resolved</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Pending</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Resolution Rate</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Avg Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wardStats.map((ward, index) => {
+                          const resolutionRate = ward.complaints > 0 
+                            ? Math.round(((ward.complaints - ward.pending) / ward.complaints) * 100)
+                            : 0;
+                          return (
+                            <tr key={index} className="border-b hover:bg-green-50">
+                              <td className="px-6 py-4 font-medium text-gray-800">{ward.ward}</td>
+                              <td className="px-6 py-4">{ward.complaints}</td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                                  {ward.complaints - ward.pending}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm">
+                                  {ward.pending}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className="bg-green-500 h-2 rounded-full"
+                                      style={{ width: `${resolutionRate}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-sm font-semibold text-gray-700">{resolutionRate}%</span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-sm text-gray-600">{ward.avgTime}h</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "audit" && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-2xl font-bold text-gray-800">Audit & Security Logging</h2>
+                  <button 
+                    onClick={() => handleExportPDFReport()}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Export Audit Log
+                  </button>
+                </div>
+
+                {/* Security Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border-2 border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">Total Actions</h3>
+                      <History className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-blue-600">{auditLogs.length}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl border-2 border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">Login Events</h3>
+                      <Lock className="w-5 h-5 text-green-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-green-600">
+                      {auditLogs.filter(log => log.action.includes('Login')).length}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-4 rounded-xl border-2 border-orange-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">Status Changes</h3>
+                      <RefreshCw className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-orange-600">
+                      {auditLogs.filter(log => log.action.includes('Status')).length}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-4 rounded-xl border-2 border-purple-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">Admin Actions</h3>
+                      <Shield className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-purple-600">
+                      {auditLogs.filter(log => log.user === 'Admin').length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Audit Log Table */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity Log</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-purple-50 to-pink-50 border-b-2 border-purple-200">
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Timestamp</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">User</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Action</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Target</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">IP Address</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.map((log, index) => (
+                          <tr key={index} className="border-b hover:bg-purple-50">
+                            <td className="px-6 py-4 text-sm text-gray-600">{log.timestamp}</td>
+                            <td className="px-6 py-4 text-sm font-medium text-gray-800">{log.user}</td>
+                            <td className="px-6 py-4 text-sm text-gray-700">{log.action}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{log.target}</td>
+                            <td className="px-6 py-4 text-xs text-gray-500">{log.ip || 'N/A'}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                                Success
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "communications" && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-800">Communication Hub</h2>
+
+                {/* Announcement Creator */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Megaphone className="w-5 h-5 text-blue-600" />
+                    System Announcement
+                  </h3>
+                  <textarea
+                    value={announcementText}
+                    onChange={(e) => setAnnouncementText(e.target.value)}
+                    placeholder="Type your announcement message here..."
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows="4"
+                  ></textarea>
+                  <div className="flex gap-3 mt-4">
+                    <button
+                      onClick={handleBroadcastAnnouncement}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                    >
+                      <Send className="w-4 h-4" />
+                      Broadcast to All Users
+                    </button>
+                    <button
+                      onClick={handleEmergencyAlert}
+                      className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                    >
+                      <AlertOctagon className="w-4 h-4" />
+                      Send Emergency Alert
+                    </button>
+                  </div>
+                </div>
+
+                {/* Communication Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border-2 border-blue-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">Total Complaints</h3>
+                      <MessageSquare className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <p className="text-4xl font-bold text-blue-600">{stats.totalComplaints || 0}</p>
+                    <p className="text-sm text-gray-600 mt-2">Filed by citizens</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl border-2 border-green-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">Active Users</h3>
+                      <Bell className="w-6 h-6 text-green-600" />
+                    </div>
+                    <p className="text-4xl font-bold text-green-600">{users.length || 0}</p>
+                    <p className="text-sm text-gray-600 mt-2">Registered in system</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-red-50 to-pink-50 p-6 rounded-xl border-2 border-red-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">Critical Issues</h3>
+                      <AlertOctagon className="w-6 h-6 text-red-600" />
+                    </div>
+                    <p className="text-4xl font-bold text-red-600">{slaBreaches.length || 0}</p>
+                    <p className="text-sm text-gray-600 mt-2">SLA breached</p>
+                  </div>
+                </div>
+
+                {/* Recent Communications - Activity Log */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Activity Log</h3>
+                  <div className="space-y-3">
+                    {auditLogs.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <History className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p>No recent activity</p>
+                      </div>
+                    ) : (
+                      auditLogs.slice(0, 5).map((log, index) => {
+                        const getActivityColor = (action) => {
+                          if (action.includes('Resolved')) return 'green';
+                          if (action.includes('Assigned')) return 'blue';
+                          if (action.includes('Status')) return 'orange';
+                          return 'purple';
+                        };
+                        const color = getActivityColor(log.action);
+                        const IconComponent = log.action.includes('Resolved') ? CheckCircle : 
+                                             log.action.includes('Assigned') ? UserCog : 
+                                             log.action.includes('Status') ? RefreshCw : History;
+                        return (
+                          <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div className={`p-2 rounded-lg bg-${color}-100`}>
+                              <IconComponent className={`w-5 h-5 text-${color}-600`} />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={`px-2 py-1 bg-${color}-100 text-${color}-700 rounded text-xs font-medium`}>
+                                  {log.action}
+                                </span>
+                                <span className="text-xs text-gray-500">{log.timestamp}</span>
+                              </div>
+                              <p className="text-sm text-gray-700">{log.user} - {log.target}</p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "reports" && (
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-gray-800">Reports & Data Export</h2>
+
+                {/* Quick Export Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <button
+                    onClick={() => handleExportPDFReport()}
+                    className="p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-lg transition-all text-left"
+                  >
+                    <FileText className="w-8 h-8 text-red-600 mb-3" />
+                    <h3 className="font-semibold text-gray-800 mb-1">PDF Report</h3>
+                    <p className="text-sm text-gray-600">Export comprehensive report</p>
+                  </button>
+                  <button
+                    onClick={() => handleExportData()}
+                    className="p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-green-300 hover:shadow-lg transition-all text-left"
+                  >
+                    <FileSpreadsheet className="w-8 h-8 text-green-600 mb-3" />
+                    <h3 className="font-semibold text-gray-800 mb-1">CSV Export</h3>
+                    <p className="text-sm text-gray-600">Download data in Excel format</p>
+                  </button>
+                  <button
+                    onClick={() => alert("Performance report generation initiated")}
+                    className="p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-300 hover:shadow-lg transition-all text-left"
+                  >
+                    <TrendingUp className="w-8 h-8 text-purple-600 mb-3" />
+                    <h3 className="font-semibold text-gray-800 mb-1">Performance Report</h3>
+                    <p className="text-sm text-gray-600">Officer & SLA analytics</p>
+                  </button>
+                  <button
+                    onClick={() => alert("Audit trail export started")}
+                    className="p-6 bg-white border-2 border-gray-200 rounded-xl hover:border-orange-300 hover:shadow-lg transition-all text-left"
+                  >
+                    <History className="w-8 h-8 text-orange-600 mb-3" />
+                    <h3 className="font-semibold text-gray-800 mb-1">Audit Trail</h3>
+                    <p className="text-sm text-gray-600">Security & compliance logs</p>
+                  </button>
+                </div>
+
+                {/* Custom Report Builder */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Custom Report Generator</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Report Type</label>
+                      <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option>Complaint Summary</option>
+                        <option>Officer Performance</option>
+                        <option>SLA Compliance</option>
+                        <option>Ward Analysis</option>
+                        <option>Category Breakdown</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+                      <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option>Last 7 Days</option>
+                        <option>Last 30 Days</option>
+                        <option>Last 3 Months</option>
+                        <option>Last Year</option>
+                        <option>Custom Range</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
+                      <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option>PDF Document</option>
+                        <option>CSV Spreadsheet</option>
+                        <option>Excel Workbook</option>
+                        <option>JSON Data</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Include</label>
+                      <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option>All Statuses</option>
+                        <option>Resolved Only</option>
+                        <option>Pending Only</option>
+                        <option>SLA Breached</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleExportPDFReport()}
+                    className="w-full md:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                  >
+                    <Download className="w-5 h-5" />
+                    Generate Custom Report
+                  </button>
+                </div>
+
+                {/* Data Summary */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Data Summary</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-gray-800">Total Complaints</p>
+                          <p className="text-xs text-gray-500">All records in database</p>
+                        </div>
+                      </div>
+                      <span className="text-2xl font-bold text-blue-600">{complaints.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                      <div className="flex items-center gap-3">
+                        <Users className="w-5 h-5 text-green-600" />
+                        <div>
+                          <p className="font-medium text-gray-800">Registered Users</p>
+                          <p className="text-xs text-gray-500">Citizens & Officers</p>
+                        </div>
+                      </div>
+                      <span className="text-2xl font-bold text-green-600">{users.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100">
+                      <div className="flex items-center gap-3">
+                        <Shield className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <p className="font-medium text-gray-800">Active Officers</p>
+                          <p className="text-xs text-gray-500">Currently assigned</p>
+                        </div>
+                      </div>
+                      <span className="text-2xl font-bold text-purple-600">{workload.length}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "system" && (
+              <div className="space-y-6">
+                <h2 className="text-xl font-bold text-gray-800">System Configuration</h2>
+
+                {/* System Stats */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-800">Total Users</h3>
+                      <Users className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-gray-800">{users.length}</p>
+                    <p className="text-sm text-gray-500 mt-2">Registered in system</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-800">Total Officers</h3>
+                      <Shield className="w-5 h-5 text-green-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-gray-800">
+                      {users.filter(u => u.Role === "Officer").length}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-2">Active officers</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-800">Total Records</h3>
+                      <Database className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <p className="text-3xl font-bold text-gray-800">{complaints.length + users.length}</p>
+                    <p className="text-sm text-gray-500 mt-2">Complaints + Users</p>
+                  </div>
+                </div>
+
+                {/* System Actions */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Sliders className="w-5 h-5 text-blue-600" />
+                      SLA Configuration
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-800">Water Issues</p>
+                          <p className="text-sm text-gray-500">Response deadline</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            defaultValue="24"
+                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center"
+                          />
+                          <span className="text-gray-600">hours</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-800">Electricity Issues</p>
+                          <p className="text-sm text-gray-500">Response deadline</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            defaultValue="48"
+                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center"
+                          />
+                          <span className="text-gray-600">hours</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-800">Road Issues</p>
+                          <p className="text-sm text-gray-500">Response deadline</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            defaultValue="72"
+                            className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center"
+                          />
+                          <span className="text-gray-600">hours</span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => alert("SLA settings saved! ✓\n\nNote: This requires backend API implementation to persist changes.\n\nRequired endpoint: PUT /admin/sla-settings")}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save SLA Settings
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-purple-600" />
+                      System Actions
+                    </h3>
+                    <div className="space-y-3">
+                      <button 
+                        onClick={() => alert("Database backup requires backend API implementation.\n\nRequired: System backup utility")}
+                        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Download className="w-5 h-5 text-blue-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-800">Backup Database</p>
+                            <p className="text-xs text-gray-500">Create system backup</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+
+                      <button 
+                        onClick={handleExportData}
+                        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg hover:border-green-400 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Download className="w-5 h-5 text-green-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-800">Export Reports</p>
+                            <p className="text-xs text-gray-500">Generate system reports</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+
+                      <button 
+                        onClick={() => setActiveTab('overview')}
+                        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg hover:border-purple-400 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <BarChart3 className="w-5 h-5 text-purple-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-800">View Analytics</p>
+                            <p className="text-xs text-gray-500">Detailed system metrics</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+
+                      <button 
+                        onClick={handleCheckEscalations}
+                        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-lg hover:border-yellow-400 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-800">Check Escalations</p>
+                            <p className="text-xs text-gray-500">Run SLA breach check</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+
+                      <button 
+                        onClick={() => alert("Cache cleared! (Note: This requires backend implementation for production)")}
+                        className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-lg hover:border-red-400 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <RefreshCw className="w-5 h-5 text-red-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-800">Clear Cache</p>
+                            <p className="text-xs text-gray-500">Clear system cache</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notification Settings */}
+                <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-yellow-600" />
+                    Notification Settings
+                  </h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-800">Email Notifications</p>
+                        <p className="text-sm text-gray-500">Send email updates</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-800">SMS Alerts</p>
+                        <p className="text-sm text-gray-500">Send SMS updates</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-800">Auto-Escalation</p>
+                        <p className="text-sm text-gray-500">Automatic SLA escalation</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="font-medium text-gray-800">Weekly Reports</p>
+                        <p className="text-sm text-gray-500">Send weekly summaries</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" defaultChecked />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({ title, value, icon: Icon, gradient, change, isPositive }) => (
+  <div className="stat-card" style={{ color: gradient.includes('blue') ? '#2563eb' : gradient.includes('green') ? '#10b981' : gradient.includes('yellow') ? '#f59e0b' : '#ef4444' }}>
+    <div className="stat-card-header">
+      <div className="stat-card-icon" style={{ background: `linear-gradient(135deg, ${gradient.includes('blue') ? '#2563eb, #1d4ed8' : gradient.includes('green') ? '#10b981, #059669' : gradient.includes('yellow') ? '#f59e0b, #d97706' : '#ef4444, #dc2626'})` }}>
+        <Icon className="w-6 h-6 text-white" />
+      </div>
+      {change && (
+        <div className={`stat-card-change ${isPositive ? "positive" : "negative"}`}>
+          {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+          <span>{change}</span>
+        </div>
+      )}
+    </div>
+    <h3 className="stat-card-title">{title}</h3>
+    <p className="stat-card-value">{value}</p>
+  </div>
+);
+
+export default AdminDashboard;

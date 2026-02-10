@@ -3,12 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
-  
- "scripts": {
-  "start": "node --watch server.js"
-},
-
-
+  "scripts": {
+    "start": "node --watch server.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
