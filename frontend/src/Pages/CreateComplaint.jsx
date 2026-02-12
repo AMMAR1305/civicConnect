@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const CreateComplaint = () => {
+const CreateComplaint = ({ isModal = false, onClose = null, onSuccess = null }) => {
     const navigate = useNavigate();
     
     // Tamil Nadu Districts
@@ -82,6 +82,19 @@ const CreateComplaint = () => {
     const [error, setError] = useState("");
     const [showPriorityReason, setShowPriorityReason] = useState(false);
     const [validationErrors, setValidationErrors] = useState({});
+
+    // ESC key to close modal
+    useEffect(() => {
+        if (isModal) {
+            const handleEsc = (e) => {
+                if (e.key === 'Escape' && onClose) {
+                    onClose();
+                }
+            };
+            window.addEventListener('keydown', handleEsc);
+            return () => window.removeEventListener('keydown', handleEsc);
+        }
+    }, [isModal, onClose]);
 
     // Validate if text looks like a real location (not gibberish)
     const validateLocation = (text, fieldName) => {
@@ -376,7 +389,30 @@ const CreateComplaint = () => {
             });
 
             alert("Complaint created successfully!");
-            navigate("/citizen");
+            
+            // Reset form
+            setFormData({
+                title: "",
+                description: "",
+                category: "Infrastructure",
+                landmark: "",
+                area: "",
+                district: "",
+                state: "",
+                pincode: "",
+                location: "",
+                priority: "Medium",
+                priorityReason: "",
+                suggestedDepartment: ""
+            });
+            setPhotoPreview(null);
+            setPhotoFile(null);
+            
+            if (isModal && onSuccess) {
+                onSuccess();
+            } else {
+                navigate("/citizen");
+            }
         } catch (err) {
             setError(err.response?.data?.message || "Failed to create complaint");
         } finally {
@@ -385,29 +421,44 @@ const CreateComplaint = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-100 p-8">
-            <div className="max-w-3xl mx-auto">
+        <div className={isModal ? "bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto" : "min-h-screen bg-slate-100 p-4 sm:p-6 md:p-8"}>
+            <div className={isModal ? "" : "max-w-3xl mx-auto"}>
 
                 {/* Header */}
-                <div className="mb-6">
-                    <button
-                        onClick={() => navigate("/citizen")}
-                        className="text-indigo-600 hover:underline mb-4"
-                    >
-                        ← Back to Dashboard
-                    </button>
-                    <h1 className="text-3xl font-bold text-slate-800">
-                        Create New Complaint
-                    </h1>
-                    <p className="text-slate-500 mt-1">
-                        Submit a service request or issue
-                    </p>
+                <div className={`${isModal ? 'sticky top-0 bg-white z-10 border-b p-4 sm:p-6' : 'mb-4 sm:mb-6'}`}>
+                    {!isModal && (
+                        <button
+                            onClick={() => navigate("/citizen")}
+                            className="text-indigo-600 hover:underline mb-3 sm:mb-4 text-sm sm:text-base"
+                        >
+                            ← Back to Dashboard
+                        </button>
+                    )}
+                    <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">
+                                Create New Complaint
+                            </h1>
+                            <p className="text-slate-500 mt-1 text-sm sm:text-base">
+                                Submit a service request or issue
+                            </p>
+                        </div>
+                        {isModal && onClose && (
+                            <button
+                                onClick={onClose}
+                                className="ml-4 text-gray-400 hover:text-gray-600 text-3xl leading-none"
+                                aria-label="Close"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Form */}
-                <div className="bg-white p-8 rounded-xl shadow-md">
+                <div className={isModal ? "p-4 sm:p-6" : "bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-md"}>
                     {error && (
-                        <div className="bg-red-100 text-red-700 p-3 rounded mb-4">
+                        <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm sm:text-base">
                             {error}
                         </div>
                     )}
@@ -415,7 +466,7 @@ const CreateComplaint = () => {
                     <form onSubmit={handleSubmit}>
 
                         <div className="mb-4">
-                            <label className="block text-slate-700 font-semibold mb-2">
+                            <label className="block text-slate-700 font-semibold mb-2 text-sm sm:text-base">
                                 Complaint Type *
                             </label>
                             <select
@@ -423,7 +474,7 @@ const CreateComplaint = () => {
                                 value={formData.title}
                                 onChange={handleChange}
                                 required
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                className="w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base"
                             >
                                 <option value="">-- Select Complaint Type --</option>
                                 {complaintTitles.map(title => (
@@ -433,14 +484,14 @@ const CreateComplaint = () => {
                         </div>
 
                         <div className="mb-4">
-                            <label className="block text-slate-700 font-semibold mb-2">
+                            <label className="block text-slate-700 font-semibold mb-2 text-sm sm:text-base">
                                 Category
                             </label>
                             <select
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                className="w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base"
                             >
                                 <option>Infrastructure</option>
                                 <option>Sanitation</option>
@@ -452,14 +503,14 @@ const CreateComplaint = () => {
                         </div>
 
                         <div className="mb-4">
-                            <label className="block text-slate-700 font-semibold mb-2">
+                            <label className="block text-slate-700 font-semibold mb-2 text-sm sm:text-base">
                                 Priority
                             </label>
                             <select
                                 name="priority"
                                 value={formData.priority}
                                 onChange={handleChange}
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                className="w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base"
                             >
                                 <option>Low</option>
                                 <option>Medium</option>
@@ -470,8 +521,8 @@ const CreateComplaint = () => {
 
                         {/* Show reason field only for High/Critical priority */}
                         {showPriorityReason && (
-                            <div className="mb-4 p-4 bg-orange-50 border-l-4 border-orange-500 rounded">
-                                <label className="block text-orange-900 font-semibold mb-2">
+                            <div className="mb-4 p-3 sm:p-4 bg-orange-50 border-l-4 border-orange-500 rounded">
+                                <label className="block text-orange-900 font-semibold mb-2 text-sm sm:text-base">
                                     Why do you think this is {formData.priority} priority? *
                                 </label>
                                 <textarea
@@ -480,7 +531,7 @@ const CreateComplaint = () => {
                                     onChange={handleChange}
                                     required
                                     rows="3"
-                                    className="w-full px-4 py-2 border-2 border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="w-full px-3 sm:px-4 py-2 border-2 border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm sm:text-base"
                                     placeholder="Please explain why this complaint requires urgent attention..."
                                 />
                                 <p className="text-xs text-orange-700 mt-1">
@@ -490,19 +541,19 @@ const CreateComplaint = () => {
                         )}
 
                         {/* Location Details Section */}
-                        <div className="mb-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl shadow-md">
-                            <h3 className="text-lg font-bold text-blue-900 mb-3 flex items-center gap-2">
+                        <div className="mb-4 sm:mb-6 p-3 sm:p-4 md:p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl shadow-md">
+                            <h3 className="text-base sm:text-lg font-bold text-blue-900 mb-2 sm:mb-3 flex items-center gap-2">
                                 📍 Location Details - Enter Original Names Only
                             </h3>
-                            <p className="text-sm text-blue-700 mb-4 bg-blue-100 p-2 rounded border border-blue-200">
+                            <p className="text-xs sm:text-sm text-blue-700 mb-3 sm:mb-4 bg-blue-100 p-2 rounded border border-blue-200">
                                 ⚠️ Please enter real, accurate location information. Fake or gibberish names will not be accepted.
                             </p>
                             
-                            <div className="space-y-4">
+                            <div className="space-y-3 sm:space-y-4">
                                 {/* Landmark */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
-                                    <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                                        🏛️ Landmark *
+                                <div className="bg-white p-3 sm:p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                                    <label className="block text-slate-700 font-bold mb-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                                        <span>🏛️ Landmark *</span>
                                         <span className="text-xs text-gray-500 font-normal">(e.g., Near City Hall, Bus Stand)</span>
                                     </label>
                                     <input
@@ -511,7 +562,7 @@ const CreateComplaint = () => {
                                         value={formData.landmark}
                                         onChange={handleLocationChange}
                                         required
-                                        className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-base ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
                                             validationErrors.landmark ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
                                         placeholder="Enter a real landmark name"
@@ -524,9 +575,9 @@ const CreateComplaint = () => {
                                 </div>
 
                                 {/* Area */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
-                                    <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                                        🏘️ Area/Locality *
+                                <div className="bg-white p-3 sm:p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                                    <label className="block text-slate-700 font-bold mb-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                                        <span>🏘️ Area/Locality *</span>
                                         <span className="text-xs text-gray-500 font-normal">(e.g., Anna Nagar, MG Road)</span>
                                     </label>
                                     <input
@@ -535,7 +586,7 @@ const CreateComplaint = () => {
                                         value={formData.area}
                                         onChange={handleLocationChange}
                                         required
-                                        className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-base ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
                                             validationErrors.area ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
                                         placeholder="Enter a real area name"
@@ -548,9 +599,9 @@ const CreateComplaint = () => {
                                 </div>
 
                                 {/* District */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
-                                    <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                                        🏙️ District *
+                                <div className="bg-white p-3 sm:p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                                    <label className="block text-slate-700 font-bold mb-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                                        <span>🏙️ District *</span>
                                         <span className="text-xs text-gray-500 font-normal">(Select from list)</span>
                                     </label>
                                     <select
@@ -558,7 +609,7 @@ const CreateComplaint = () => {
                                         value={formData.district}
                                         onChange={handleLocationChange}
                                         required
-                                        className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-base ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
                                             validationErrors.district ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
                                     >
@@ -575,9 +626,9 @@ const CreateComplaint = () => {
                                 </div>
 
                                 {/* State */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
-                                    <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                                        🗺️ State *
+                                <div className="bg-white p-3 sm:p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                                    <label className="block text-slate-700 font-bold mb-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                                        <span>🗺️ State *</span>
                                         <span className="text-xs text-gray-500 font-normal">(Select from list)</span>
                                     </label>
                                     <select
@@ -585,7 +636,7 @@ const CreateComplaint = () => {
                                         value={formData.state}
                                         onChange={handleLocationChange}
                                         required
-                                        className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-base ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
                                             validationErrors.state ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
                                     >
@@ -602,9 +653,9 @@ const CreateComplaint = () => {
                                 </div>
 
                                 {/* Pincode */}
-                                <div className="bg-white p-4 rounded-lg border-2 border-gray-300 shadow-sm">
-                                    <label className="block text-slate-700 font-bold mb-2 flex items-center gap-2">
-                                        📮 Pincode *
+                                <div className="bg-white p-3 sm:p-4 rounded-lg border-2 border-gray-300 shadow-sm">
+                                    <label className="block text-slate-700 font-bold mb-2 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+                                        <span>📮 Pincode *</span>
                                         <span className="text-xs text-gray-500 font-normal">(6 digits only)</span>
                                     </label>
                                     <input
@@ -615,7 +666,7 @@ const CreateComplaint = () => {
                                         required
                                         pattern="[0-9]{6}"
                                         maxLength="6"
-                                        className={`w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-base ${
+                                        className={`w-full px-3 sm:px-4 py-2 sm:py-3 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${
                                             validationErrors.pincode ? 'border-red-500 bg-red-50' : 'border-gray-300'
                                         }`}
                                         placeholder="e.g., 600001"
@@ -630,18 +681,18 @@ const CreateComplaint = () => {
                         </div>
 
                         <div className="mb-4">
-                            <label className="block text-slate-700 font-semibold mb-2">
+                            <label className="block text-slate-700 font-semibold mb-2 text-sm sm:text-base">
                                 Upload Photo (Optional)
                             </label>
-                            <div className="flex gap-2 mb-2">
+                            <div className="flex flex-col sm:flex-row gap-2 mb-2">
                                 <button
                                     type="button"
                                     onClick={capturePhoto}
-                                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600"
+                                    className="flex-1 bg-blue-500 text-white py-2 sm:py-3 px-4 rounded-lg hover:bg-blue-600 text-sm sm:text-base"
                                 >
                                     📷 Capture Photo
                                 </button>
-                                <label className="flex-1 bg-slate-500 text-white py-2 px-4 rounded-lg hover:bg-slate-600 text-center cursor-pointer">
+                                <label className="flex-1 bg-slate-500 text-white py-2 sm:py-3 px-4 rounded-lg hover:bg-slate-600 text-center cursor-pointer text-sm sm:text-base">
                                     📁 Choose File
                                     <input
                                         type="file"
@@ -673,7 +724,7 @@ const CreateComplaint = () => {
                         </div>
 
                         <div className="mb-4">
-                            <label className="block text-slate-700 font-semibold mb-2">
+                            <label className="block text-slate-700 font-semibold mb-2 text-sm sm:text-base">
                                 Description
                             </label>
                             <textarea
@@ -682,14 +733,14 @@ const CreateComplaint = () => {
                                 onChange={handleChange}
                                 required
                                 rows="5"
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                className="w-full px-3 sm:px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base"
                                 placeholder="Detailed description of the complaint"
                             />
                         </div>
 
                         {/* Optional: Suggested Department/Officer */}
-                        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <label className="block text-blue-900 font-semibold mb-2">
+                        <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <label className="block text-blue-900 font-semibold mb-2 text-sm sm:text-base">
                                 Who should take action? (Optional)
                             </label>
                             <input
@@ -697,7 +748,7 @@ const CreateComplaint = () => {
                                 name="suggestedDepartment"
                                 value={formData.suggestedDepartment}
                                 onChange={handleChange}
-                                className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 sm:px-4 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
                                 placeholder="e.g., Public Works Department, Water Board, Electricity Department..."
                             />
                             <p className="text-xs text-blue-700 mt-1">
@@ -708,7 +759,7 @@ const CreateComplaint = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-slate-400"
+                            className="w-full bg-indigo-600 text-white py-3 sm:py-4 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-slate-400 text-sm sm:text-base"
                         >
                             {loading ? "Submitting..." : "Submit Complaint"}
                         </button>

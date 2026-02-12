@@ -105,9 +105,8 @@ export const DonutChart = ({ data, title }) => {
   let cumulativePercent = 0;
   
   return (
-    <div className="chart-container">
-      {title && <h4 className="chart-title">{title}</h4>}
-      <div className="donut-chart-wrapper">
+    <div className="donut-chart-wrapper">
+      <div className="donut-chart-container">
         <svg className="donut-chart" viewBox="0 0 42 42">
           <circle className="donut-chart-background" cx="21" cy="21" r="15.91549430918954" />
           {data.map((item, index) => {
@@ -131,23 +130,22 @@ export const DonutChart = ({ data, title }) => {
               />
             );
           })}
-          <text x="21" y="21" className="donut-chart-center-text">
-            <tspan className="donut-chart-total">{total}</tspan>
-            <tspan x="21" dy="1.2em" className="donut-chart-label">Total</tspan>
+          <text x="50%" y="50%" className="donut-chart-center-text" textAnchor="middle" dominantBaseline="middle">
+            <tspan className="donut-chart-total" x="50%" dy="0">{total}</tspan>
           </text>
         </svg>
-        <div className="donut-chart-legend">
-          {data.map((item, index) => (
-            <div key={index} className="donut-chart-legend-item">
-              <span
-                className="donut-chart-legend-color"
-                style={{ background: item.color || `hsl(${index * 60}, 70%, 50%)` }}
-              />
-              <span className="donut-chart-legend-label">{item.label}</span>
-              <span className="donut-chart-legend-value">{item.value}</span>
-            </div>
-          ))}
-        </div>
+      </div>
+      <div className="donut-chart-legend">
+        {data.map((item, index) => (
+          <div key={index} className="donut-chart-legend-item">
+            <span
+              className="donut-chart-legend-color"
+              style={{ background: item.color || `hsl(${index * 60}, 70%, 50%)` }}
+            />
+            <span className="donut-chart-legend-label">{item.label}</span>
+            <span className="donut-chart-legend-value">{item.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -162,7 +160,7 @@ export const ProgressRing = ({ value, max = 100, label, color = '#2563eb', size 
   
   return (
     <div className="progress-ring-container">
-      <svg width={size} height={size} className="progress-ring">
+      <svg width={size} height={size} className="progress-ring" viewBox={`0 0 ${size} ${size}`}>
         <circle
           className="progress-ring-background"
           cx={size / 2}
@@ -187,14 +185,14 @@ export const ProgressRing = ({ value, max = 100, label, color = '#2563eb', size 
           style={{ animation: 'progressRing 1.5s ease-out both' }}
         />
         <text
-          x="50%"
-          y="50%"
+          x={size / 2}
+          y={size / 2}
           className="progress-ring-text"
           dominantBaseline="middle"
           textAnchor="middle"
         >
-          <tspan className="progress-ring-value">{Math.round(percentage)}%</tspan>
-          {label && <tspan x="50%" dy="1.5em" className="progress-ring-label">{label}</tspan>}
+          <tspan className="progress-ring-value" x={size / 2} dy="0">{Math.round(percentage)}%</tspan>
+          {label && <tspan className="progress-ring-label" x={size / 2} dy="2.0em">{label}</tspan>}
         </text>
       </svg>
     </div>

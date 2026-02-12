@@ -265,16 +265,24 @@
 /* ===== DONUT CHART ===== */
 .donut-chart-wrapper {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3rem;
-  flex-wrap: wrap;
+  gap: 2.5rem;
+  width: 100%;
+}
+
+.donut-chart-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .donut-chart {
-  width: 200px;
-  height: 200px;
+  width: 240px;
+  height: 240px;
   transform: rotate(-90deg);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
 }
 
 .donut-chart-background {
@@ -300,34 +308,40 @@
 }
 
 .donut-chart-center-text {
+  text-anchor: middle;
+  dominant-baseline: middle;
   transform: rotate(90deg);
   transform-origin: center;
-  text-anchor: middle;
 }
 
 .donut-chart-total {
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 700;
   fill: #1e293b;
 }
 
 .donut-chart-label {
-  font-size: 0.75rem;
+  text-align: center;
+  font-size: 0.6rem;
   font-weight: 600;
   fill: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .donut-chart-legend {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
+  width: 100%;
+  padding: 0 1rem;
 }
 
 .donut-chart-legend-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem;
+  padding: 0.75rem 1rem;
   border-radius: 8px;
   transition: background 0.3s ease;
   cursor: pointer;
@@ -361,10 +375,11 @@
 .progress-ring-container {
   display: inline-block;
   position: relative;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
 }
 
 .progress-ring {
-  transform: rotate(-90deg);
+  /* No rotation needed as handled in the transform attribute */
 }
 
 @keyframes progressRing {
@@ -378,14 +393,17 @@
 }
 
 .progress-ring-value {
-  font-size: 1.5rem;
+  font-size: 2rem;
   font-weight: 800;
+  fill: #1e293b;
 }
 
 .progress-ring-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   fill: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* ===== STAT COMPARISON ===== */
