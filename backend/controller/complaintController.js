@@ -13,43 +13,82 @@ now.setHours(now.getHours() + hours);
   return now;
 };
 
-// Auto-assign officer based on workload
-const autoAssignOfficer = async () => {
+// Auto-assign officer based on category, zone, and workload
+const autoAssignOfficer = async (category, zone) => {
   try {
     console.log('🔍 Finding best officer for assignment...');
+    console.log(`   Category: ${category}`);
+    console.log(`   Zone: ${zone}`);
     
-    // Get all officers
-    const officers = await User.find({ Role: 'Officer' });
+    // Get all available officers
+    const officers = await User.find({ 
+      Role: 'Officer',
+      isAvailable: true
+    });
     
     if (officers.length === 0) {
       console.log('⚠️ No officers found in system');
       return null;
     }
     
-    console.log(`✓ Found ${officers.length} officer(s)`);
+    console.log(`✓ Found ${officers.length} available officer(s)`);
     
-    // Get complaint count for each officer
-    const officerWorkloads = await Promise.all(
+    // Score each officer based on category match, zone match, and workload
+    const officerScores = await Promise.all(
       officers.map(async (officer) => {
         const activeComplaints = await Complaint.countDocuments({
           assignedOfficer: officer._id,
           status: { $nin: ['Resolved', 'Closed'] }
         });
+        
+        let score = 0;
+        
+        // Category match (highest priority) - 100 points
+        if (officer.specializations && officer.specializations.length > 0) {
+          if (officer.specializations.includes(category)) {
+            score += 100;
+          }
+        } else {
+          // If no specializations set, officer can handle any category
+          score += 50;
+        }
+        
+        // Zone match (second priority) - 50 points
+        if (officer.assignedZones && officer.assignedZones.length > 0) {
+          if (officer.assignedZones.includes(zone)) {
+            score += 50;
+          }
+        } else {
+          // If no zones set, officer can handle any zone
+          score += 25;
+        }
+        
+        // Workload (least priority) - inverse score (fewer complaints = higher score)
+        // Max 30 points for 0 complaints, decreasing by 3 points per complaint
+        const workloadScore = Math.max(0, 30 - (activeComplaints * 3));
+        score += workloadScore;
+        
         return {
           officer,
-          workload: activeComplaints
+          workload: activeComplaints,
+          score,
+          specializations: officer.specializations || [],
+          zones: officer.assignedZones || []
         };
       })
     );
     
-    // Sort by workload (ascending) - officer with least work gets the complaint
-    officerWorkloads.sort((a, b) => a.workload - b.workload);
+    // Sort by score (descending) - highest score wins
+    officerScores.sort((a, b) => b.score - a.score);
     
-    const selectedOfficer = officerWorkloads[0].officer;
-    console.log(`✓ Selected officer: ${selectedOfficer.Name} (${selectedOfficer.Email})`);
-    console.log(`  Current workload: ${officerWorkloads[0].workload} active complaints`);
+    const selected = officerScores[0];
+    console.log(`✓ Selected officer: ${selected.officer.Name} (${selected.officer.Email})`);
+    console.log(`  Score: ${selected.score}`);
+    console.log(`  Workload: ${selected.workload} active complaints`);
+    console.log(`  Specializations: ${selected.specializations.join(', ') || 'All categories'}`);
+    console.log(`  Zones: ${selected.zones.join(', ') || 'All zones'}`);
     
-    return selectedOfficer._id;
+    return selected.officer._id;
   } catch (error) {
     console.error('❌ Error in auto-assign:', error);
     return null;
@@ -75,14 +114,42 @@ exports.createComplaint = async (req, res) => {
     }
     
     console.log('✓ User authenticated as Citizen');
+    
+    // Validate location fields
+    const { landmark, area, district, state, pincode } = req.body;
+    
+    const trimmedLandmark = (landmark || "").trim();
+    const trimmedArea = (area || "").trim();
+    const trimmedDistrict = (district || "").trim();
+    const trimmedState = (state || "").trim();
+    const trimmedPincode = String(pincode || "").trim();
+    
+    // Check required fields are not empty
+    if (!trimmedLandmark || !trimmedArea || !trimmedDistrict || !trimmedState) {
+      console.log('❌ Location validation failed: Empty fields');
+      return res.status(400).json({
+        message: "Please enter valid location details. Pincode must be exactly 6 digits."
+      });
+    }
+    
+    // Validate pincode is exactly 6 numeric digits
+    if (!/^\d{6}$/.test(trimmedPincode)) {
+      console.log('❌ Location validation failed: Invalid pincode format');
+      return res.status(400).json({
+        message: "Please enter valid location details. Pincode must be exactly 6 digits."
+      });
+    }
+    
+    console.log('✓ Location validation passed');
     console.log('🕐 Calculating SLA deadline for category:', req.body.category);
     
     const slaDeadline = calculateSLA(req.body.category);
     console.log('✓ SLA deadline:', slaDeadline);
 
-    // Auto-assign to officer
+    // Auto-assign to officer based on category, zone, and workload
     console.log('🤖 Auto-assigning officer...');
-    const assignedOfficerId = await autoAssignOfficer();
+    const zone = req.body.district || req.body.area || 'Unspecified';
+    const assignedOfficerId = await autoAssignOfficer(req.body.category, zone);
     
     if (assignedOfficerId) {
       console.log('✓ Officer auto-assigned successfully');
@@ -95,11 +162,11 @@ exports.createComplaint = async (req, res) => {
       title: req.body.title,
       description: req.body.description,
       category: req.body.category,
-      landmark: req.body.landmark,
-      area: req.body.area,
-      district: req.body.district,
-      state: req.body.state,
-      pincode: req.body.pincode,
+      landmark: trimmedLandmark,
+      area: trimmedArea,
+      district: trimmedDistrict,
+      state: trimmedState,
+      pincode: trimmedPincode,
       location: req.body.location,
       address: req.body.address,
       priority: req.body.priority,
@@ -107,11 +174,17 @@ exports.createComplaint = async (req, res) => {
       suggestedDepartment: req.body.suggestedDepartment || null,
       citizen: req.user.id,
       assignedOfficer: assignedOfficerId, // Auto-assigned officer
+      status: assignedOfficerId ? "Assigned" : "Submitted", // Set status based on assignment
       slaDeadline,
       history: [
         { status: "Submitted", updatedAt: new Date() }
       ]
     };
+    
+    // Add assignment to history if officer was assigned
+    if (assignedOfficerId) {
+      complaintData.history.push({ status: "Assigned", updatedAt: new Date() });
+    }
 
     // Add photo path if file was uploaded
     if (req.file) {

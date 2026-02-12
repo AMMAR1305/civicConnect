@@ -54,7 +54,7 @@ exports.register = async (req, res) => {
         console.log('\n🔵 === REGISTRATION REQUEST ===');
         console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
         
-        const { Name, Email, Password, Role } = req.body;
+        const { Name, Email, Password, Role, assignedZones, specializations, isAvailable } = req.body;
         
         // Validate required fields
         if (!Name || !Email || !Password) {
@@ -81,18 +81,38 @@ exports.register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(Password, 10);
         
         console.log('💾 Creating user in database...');
-        const user = await User.create({
+        
+        // Prepare user data
+        const userData = {
             Name,
             Email,
             Password: hashedPassword,
             Role: Role || 'Citizen'
-        });
+        };
+        
+        // Add officer-specific fields if Role is Officer
+        if (Role === 'Officer') {
+            userData.assignedZones = assignedZones || [];
+            userData.specializations = specializations || [];
+            userData.isAvailable = isAvailable !== undefined ? isAvailable : true;
+            console.log('👮 Officer-specific fields:', {
+                assignedZones: userData.assignedZones,
+                specializations: userData.specializations,
+                isAvailable: userData.isAvailable
+            });
+        }
+        
+        const user = await User.create(userData);
 
         console.log(`✅ USER CREATED SUCCESSFULLY!`);
         console.log(`   - ID: ${user._id}`);
         console.log(`   - Name: ${user.Name}`);
         console.log(`   - Email: ${user.Email}`);
         console.log(`   - Role: ${user.Role}`);
+        if (Role === 'Officer') {
+            console.log(`   - Zones: ${user.assignedZones?.join(', ') || 'All'}`);
+            console.log(`   - Specializations: ${user.specializations?.join(', ') || 'All'}`);
+        }
         console.log('=========================\n');
         
         res.status(201).json({ 

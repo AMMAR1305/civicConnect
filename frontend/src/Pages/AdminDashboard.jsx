@@ -15,7 +15,14 @@ const AdminDashboard = () => {
     // Add user modal
     showAddUserModal: false, newUserData: { Name: '', Email: '', Password: '' },
     // Officer management
-    newOfficerData: { Name: '', Email: '', Password: '' },
+    newOfficerData: { 
+      Name: '', 
+      Email: '', 
+      Password: '', 
+      assignedZones: [], 
+      specializations: [], 
+      isAvailable: true 
+    },
     // Selected items for inline details
     selectedOfficerId: null,
     selectedCitizenId: null,
@@ -182,7 +189,7 @@ const AdminDashboard = () => {
     },
     addOfficer: async () => {
       try {
-        const { Name, Email, Password } = state.newOfficerData;
+        const { Name, Email, Password, assignedZones, specializations, isAvailable } = state.newOfficerData;
         if (!Name || !Email || !Password) {
           alert('Please fill all fields');
           return;
@@ -193,7 +200,10 @@ const AdminDashboard = () => {
           Name,
           Email,
           Password,
-          Role: 'Officer'
+          Role: 'Officer',
+          assignedZones,
+          specializations,
+          isAvailable
         }, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -201,7 +211,14 @@ const AdminDashboard = () => {
         alert('Officer added successfully!');
         updateState({ 
           showAddOfficerForm: false, 
-          newOfficerData: { Name: '', Email: '', Password: '' }
+          newOfficerData: { 
+            Name: '', 
+            Email: '', 
+            Password: '', 
+            assignedZones: [], 
+            specializations: [], 
+            isAvailable: true 
+          }
         });
         loadData(); // Refresh the data
       } catch (error) {
@@ -228,9 +245,18 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-dashboard min-h-screen bg-gradient-to-br from-blue-50 to-orange-50">
-      {/* Mobile Sidebar */}
-      {state.mobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={() => updateState({ mobileMenuOpen: false })} />}
-      <div className={`fixed inset-y-0 left-0 w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 md:hidden ${state.mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      {/* Mobile Sidebar - Full Screen Overlay */}
+      {state.mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 md:hidden" 
+          style={{ zIndex: 9998 }}
+          onClick={() => updateState({ mobileMenuOpen: false })} 
+        />
+      )}
+      <div 
+        className={`fixed inset-0 bg-white shadow-2xl transform transition-transform duration-300 md:hidden ${state.mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ zIndex: 9999 }}
+      >
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-600 to-indigo-600">
             <div className="flex items-center gap-2"><LayoutDashboard className="w-6 h-6 text-white" /><span className="font-bold text-white">Menu</span></div>
@@ -676,11 +702,11 @@ const AdminDashboard = () => {
                         <h3 className="font-semibold mb-4">Officer Efficiency Scores</h3>
                         <div className="space-y-3">{workload.map((o, i) => { const score = o.assigned > 0 ? Math.round((o.resolved / o.assigned) * 100) : 0; return <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">{o.name?.charAt(0)}</div><div><p className="font-medium">{o.name}</p><p className="text-sm text-gray-600">Assigned: {o.assigned}</p></div></div><div className="text-right"><p className="text-2xl font-bold text-blue-600">{score}%</p><p className="text-xs text-gray-500">{o.resolved} resolved</p></div></div>; })}</div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{officers.map(o => <div key={o._id} className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200"><div className="flex items-center gap-3 mb-3"><div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl">{o.Name?.charAt(0)}</div><div><h4 className="font-bold">{o.Name}</h4><p className="text-sm text-gray-600">{o.Email}</p></div></div><button onClick={() => updateState({ selectedOfficerId: o._id })} className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Eye className="w-4 h-4 inline mr-2" />View Details</button></div>)}</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{officers.map(o => <div key={o._id} className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200"><div className="flex items-center gap-3 mb-3"><div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl">{o.Name?.charAt(0)}</div><div className="flex-1 min-w-0"><h4 className="font-bold truncate">{o.Name}</h4><p className="text-sm text-gray-600 truncate">{o.Email}</p></div></div>{(o.specializations && o.specializations.length > 0) && <div className="mb-3"><p className="text-xs text-gray-600 mb-1">Specializations:</p><div className="flex flex-wrap gap-1">{o.specializations.slice(0, 3).map((s, i) => <span key={i} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">{s}</span>)}{o.specializations.length > 3 && <span className="px-2 py-0.5 bg-gray-200 text-gray-600 rounded text-xs">+{o.specializations.length - 3}</span>}</div></div>}<button onClick={() => updateState({ selectedOfficerId: o._id })} className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Eye className="w-4 h-4 inline mr-2" />View Details</button></div>)}</div>
                     </>
                   ) : state.showAddOfficerForm ? (
                     <>
-                      <button onClick={() => updateState({ showAddOfficerForm: false, newOfficerData: { Name: '', Email: '', Password: '' } })} className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-4">
+                      <button onClick={() => updateState({ showAddOfficerForm: false, newOfficerData: { Name: '', Email: '', Password: '', assignedZones: [], specializations: [], isAvailable: true } })} className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 mb-4">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                         Back to Officers
                       </button>
@@ -730,6 +756,80 @@ const AdminDashboard = () => {
                           />
                         </div>
                         
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Specializations (Categories)
+                          </label>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {['Water', 'Electricity', 'Road', 'Sanitation', 'Public Works', 'Traffic'].map(cat => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => {
+                                  const specs = state.newOfficerData.specializations || [];
+                                  const newSpecs = specs.includes(cat) 
+                                    ? specs.filter(s => s !== cat)
+                                    : [...specs, cat];
+                                  updateState({ 
+                                    newOfficerData: { ...state.newOfficerData, specializations: newSpecs }
+                                  });
+                                }}
+                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                  (state.newOfficerData.specializations || []).includes(cat)
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-500">Select categories this officer can handle</p>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Assigned Zones/Districts
+                          </label>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {state.newOfficerData.assignedZones?.map((zone, idx) => (
+                              <div key={idx} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-lg">
+                                <span className="text-sm">{zone}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newZones = state.newOfficerData.assignedZones.filter((_, i) => i !== idx);
+                                    updateState({ 
+                                      newOfficerData: { ...state.newOfficerData, assignedZones: newZones }
+                                    });
+                                  }}
+                                  className="ml-1 text-blue-900 hover:text-blue-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Enter zone/district name"
+                              className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 text-sm"
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && e.target.value.trim()) {
+                                  e.preventDefault();
+                                  const newZones = [...(state.newOfficerData.assignedZones || []), e.target.value.trim()];
+                                  updateState({ 
+                                    newOfficerData: { ...state.newOfficerData, assignedZones: newZones }
+                                  });
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">Press Enter to add a zone</p>
+                        </div>
+                        
                         <div className="flex gap-3 pt-4">
                           <button
                             onClick={actions.addOfficer}
@@ -764,6 +864,55 @@ const AdminDashboard = () => {
                           <div className="flex-1 min-w-0">
                             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold truncate">{selectedOfficer.Name}</h2>
                             <p className="text-white text-sm sm:text-base truncate">{selectedOfficer.Email}</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-white p-6 rounded-xl border-2 border-gray-200">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <Target className="w-5 h-5 text-indigo-600" />
+                          Assignment Configuration
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Specializations (Categories)
+                            </label>
+                            {selectedOfficer.specializations && selectedOfficer.specializations.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {selectedOfficer.specializations.map((spec, idx) => (
+                                  <span key={idx} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
+                                    {spec}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm italic">All categories</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Assigned Zones/Districts
+                            </label>
+                            {selectedOfficer.assignedZones && selectedOfficer.assignedZones.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {selectedOfficer.assignedZones.map((zone, idx) => (
+                                  <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                                    {zone}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm italic">All zones</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${selectedOfficer.isAvailable !== false ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                            <span className="text-sm font-medium text-gray-700">
+                              {selectedOfficer.isAvailable !== false ? 'Available for assignments' : 'Currently unavailable'}
+                            </span>
                           </div>
                         </div>
                       </div>

@@ -22,6 +22,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["Citizen", "Officer", "Admin"],
       default: "Citizen"
+    },
+
+    // Officer-specific fields for auto-assignment
+    assignedZones: {
+      type: [String],
+      default: []
+    },
+
+    specializations: {
+      type: [String],
+      default: []
+    },
+
+    isAvailable: {
+      type: Boolean,
+      default: true
     }
   },
   { timestamps: true }
