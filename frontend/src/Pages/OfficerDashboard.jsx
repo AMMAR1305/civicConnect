@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { 
   Search, Filter, LogOut, Clock, AlertTriangle, CheckCircle, FileText,
   TrendingUp, BarChart3, Users, Calendar, MapPin, Eye, 
-  RefreshCw, Download, ChevronDown, User, Settings, X
+  RefreshCw, Download, ChevronDown, User, Settings, X, Package
 } from "lucide-react";
+import BulkComplaintManager from "../Components/BulkComplaintManager";
 
 const OfficerDashboard = () => {
   const [complaints, setComplaints] = useState([]);
@@ -19,6 +20,7 @@ const OfficerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showBulkManager, setShowBulkManager] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -409,10 +411,19 @@ const OfficerDashboard = () => {
                   <p className="text-xs sm:text-sm text-gray-600">{filteredComplaints.length} found</p>
                 </div>
               </div>
-              <button className="hidden sm:flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-semibold transition-all shadow-md border border-gray-200 text-sm">
-                <Download size={16} />
-                <span className="hidden md:inline">Export</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowBulkManager(true)}
+                  className="hidden sm:flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-semibold transition-all shadow-md text-sm"
+                >
+                  <Package size={16} />
+                  <span className="hidden md:inline">Bulk Update</span>
+                </button>
+                <button className="hidden sm:flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-700 px-3 py-2 sm:px-4 sm:py-2 rounded-lg font-semibold transition-all shadow-md border border-gray-200 text-sm">
+                  <Download size={16} />
+                  <span className="hidden md:inline">Export</span>
+                </button>
+              </div>
             </div>
           </div>
           
@@ -584,6 +595,12 @@ const OfficerDashboard = () => {
         </div>
 
       </div>
+      
+      {/* Bulk Complaint Manager Modal */}
+      <BulkComplaintManager 
+        isOpen={showBulkManager} 
+        onClose={() => setShowBulkManager(false)} 
+      />
     </div>
   );
 };

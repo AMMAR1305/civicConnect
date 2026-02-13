@@ -295,6 +295,250 @@ exports.updateComplaintStatus = async (req, res) => {
   }
 };
 
+// Bulk update complaints by location
+exports.bulkUpdateByLocation = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.user.Role !== "Officer" && req.user.Role !== "Admin") {
+      return res.status(403).json({ message: "Only officers and admins can update complaints", userRole: req.user.Role });
+    }
+
+    const { area, district, category, status, comment } = req.body;
+
+    if (!area || !district || !status) {
+      return res.status(400).json({ message: "Area, district, and status are required" });
+    }
+
+    // Build query to find similar complaints
+    const query = {
+      area: area,
+      district: district,
+      status: { $nin: ['Resolved', 'Closed'] } // Only update active complaints
+    };
+
+    // Add category filter if provided
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    // Find matching complaints
+    const complaints = await Complaint.find(query);
+
+    if (complaints.length === 0) {
+      return res.status(404).json({ message: "No matching complaints found in this location" });
+    }
+
+    // Update all matching complaints
+    const updateData = {
+      status: status,
+      $push: {
+        history: {
+          status: status,
+          updatedAt: new Date(),
+          comment: comment || `Bulk updated for ${area}, ${district}`
+        }
+      }
+    };
+
+    const result = await Complaint.updateMany(query, updateData);
+
+    console.log(`🔄 Bulk update completed: ${result.modifiedCount} complaints updated`);
+
+    res.json({
+      message: `Successfully updated ${result.modifiedCount} complaints in ${area}, ${district}`,
+      updatedCount: result.modifiedCount,
+      area: area,
+      district: district,
+      category: category
+    });
+  } catch (error) {
+    console.error('Bulk update error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get complaints grouped by location
+exports.getComplaintsByLocation = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.user.Role !== "Officer" && req.user.Role !== "Admin") {
+      return res.status(403).json({ message: "Only officers and admins can access this data", userRole: req.user.Role });
+    }
+
+    // Aggregate complaints by location
+    const locationGroups = await Complaint.aggregate([
+      {
+        $match: {
+          status: { $nin: ['Resolved', 'Closed'] } // Only active complaints
+        }
+      },
+      {
+        $group: {
+          _id: {
+            area: '$area',
+            district: '$district',
+            category: '$category'
+          },
+          complaints: {
+            $push: {
+              _id: '$_id',
+              title: '$title',
+              status: '$status',
+              priority: '$priority',
+              createdAt: '$createdAt'
+            }
+          },
+          count: { $sum: 1 },
+          statuses: { $push: '$status' },
+          priorities: { $push: '$priority' }
+        }
+      },
+      {
+        $match: {
+          count: { $gte: 2 } // Only show locations with multiple complaints
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    res.json({
+      message: "Location-based complaint groups retrieved successfully",
+      locationGroups: locationGroups
+    });
+  } catch (error) {
+    console.error('Get complaints by location error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Bulk update complaints by location
+exports.bulkUpdateByLocation = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.user.Role !== "Officer" && req.user.Role !== "Admin") {
+      return res.status(403).json({ message: "Only officers and admins can update complaints", userRole: req.user.Role });
+    }
+
+    const { area, district, category, status, comment } = req.body;
+
+    if (!area || !district || !status) {
+      return res.status(400).json({ message: "Area, district, and status are required" });
+    }
+
+    // Build query to find similar complaints
+    const query = {
+      area: area,
+      district: district,
+      status: { $nin: ['Resolved', 'Closed'] } // Only update active complaints
+    };
+
+    // Add category filter if provided
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    // Find matching complaints
+    const complaints = await Complaint.find(query);
+
+    if (complaints.length === 0) {
+      return res.status(404).json({ message: "No matching complaints found in this location" });
+    }
+
+    // Update all matching complaints
+    const updateData = {
+      status: status,
+      $push: {
+        history: {
+          status: status,
+          updatedAt: new Date(),
+          comment: comment || `Bulk update for ${area}, ${district}`
+        }
+      }
+    };
+
+    const result = await Complaint.updateMany(query, updateData);
+
+    console.log(`🔄 Bulk update completed: ${result.modifiedCount} complaints updated`);
+
+    res.json({
+      message: `Successfully updated ${result.modifiedCount} complaints in ${area}, ${district}`,
+      updatedCount: result.modifiedCount,
+      area: area,
+      district: district,
+      category: category
+    });
+  } catch (error) {
+    console.error('Bulk update error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get complaints grouped by location
+exports.getComplaintsByLocation = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (req.user.Role !== "Officer" && req.user.Role !== "Admin") {
+      return res.status(403).json({ message: "Only officers and admins can access this data", userRole: req.user.Role });
+    }
+
+    // Aggregate complaints by location
+    const locationGroups = await Complaint.aggregate([
+      {
+        $match: {
+          status: { $nin: ['Resolved', 'Closed'] } // Only active complaints
+        }
+      },
+      {
+        $group: {
+          _id: {
+            area: '$area',
+            district: '$district',
+            category: '$category'
+          },
+          complaints: {
+            $push: {
+              _id: '$_id',
+              title: '$title',
+              status: '$status',
+              priority: '$priority',
+              createdAt: '$createdAt'
+            }
+          },
+          count: { $sum: 1 },
+          statuses: { $push: '$status' },
+          priorities: { $push: '$priority' }
+        }
+      },
+      {
+        $match: {
+          count: { $gte: 2 } // Only show locations with multiple complaints
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    res.json({
+      message: "Location-based complaint groups retrieved successfully",
+      locationGroups: locationGroups
+    });
+  } catch (error) {
+    console.error('Get complaints by location error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.checkEscalations = async (req, res) => {
   try {
     const now = new Date();

@@ -129,12 +129,102 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-slate-800">
-      {/* Government Background Pattern */}
+      {/* Enhanced Government Background Animations */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-full opacity-5">
+        {/* Floating Government Symbols */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-10">
           <div className="absolute top-1/4 left-1/4 w-24 h-24 bg-blue-900 rounded-full animate-pulse"></div>
           <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-indigo-900 rounded-full animate-pulse animation-delay-2000"></div>
           <div className="absolute bottom-1/4 left-1/2 w-28 h-28 bg-navy-900 rounded-full animate-pulse animation-delay-4000"></div>
+        </div>
+        
+        {/* Geometric Grid Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="grid grid-cols-12 grid-rows-8 h-full w-full">
+            {Array.from({ length: 96 }).map((_, i) => (
+              <div
+                key={i}
+                className="border border-slate-300 opacity-30"
+                style={{
+                  animationDelay: `${(i % 12) * 0.1}s`,
+                  animation: 'pulseGrid 4s ease-in-out infinite'
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Floating Civic Icons */}
+        <div className="absolute inset-0 opacity-15">
+          <div className="absolute top-16 left-20 animate-float-slow">
+            <Shield className="w-12 h-12 text-blue-800" />
+          </div>
+          <div className="absolute top-32 right-32 animate-float-slow animation-delay-1000">
+            <FileText className="w-10 h-10 text-indigo-700" />
+          </div>
+          <div className="absolute top-80 left-1/3 animate-float-slow animation-delay-2000">
+            <MapPin className="w-14 h-14 text-slate-700" />
+          </div>
+          <div className="absolute bottom-40 right-20 animate-float-slow animation-delay-3000">
+            <Users className="w-11 h-11 text-blue-900" />
+          </div>
+          <div className="absolute bottom-80 left-16 animate-float-slow animation-delay-4000">
+            <BarChart3 className="w-13 h-13 text-indigo-800" />
+          </div>
+        </div>
+
+        {/* Dynamic Connecting Lines */}
+        <div className="absolute inset-0 opacity-8">
+          <svg className="w-full h-full animate-pulse">
+            <defs>
+              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#1e40af" stopOpacity="0.3" />
+                <stop offset="50%" stopColor="#3730a3" stopOpacity="0.1" />
+                <stop offset="100%" stopColor="#0f172a" stopOpacity="0.3" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M 50 100 Q 200 50 350 150 T 650 100"
+              stroke="url(#lineGradient)"
+              strokeWidth="2"
+              fill="none"
+              className="animate-draw-line"
+            />
+            <path
+              d="M 100 300 Q 300 200 500 350 T 800 200"
+              stroke="url(#lineGradient)"
+              strokeWidth="1.5"
+              fill="none"
+              className="animate-draw-line animation-delay-2000"
+            />
+          </svg>
+        </div>
+
+        {/* Particle Effect */}
+        <div className="absolute inset-0 opacity-20">
+          {Array.from({ length: 15 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-2 h-2 bg-blue-600 rounded-full animate-particle"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${i * 0.5}s`,
+                animationDuration: `${4 + Math.random() * 3}s`
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Government Seal Animation */}
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-5">
+          <div className="w-96 h-96 border-8 border-slate-400 rounded-full animate-spin-slow">
+            <div className="w-full h-full border-4 border-dashed border-blue-400 rounded-full animate-spin-reverse">
+              <div className="w-full h-full flex items-center justify-center">
+                <Shield className="w-32 h-32 text-slate-600 animate-pulse" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

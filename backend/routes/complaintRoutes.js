@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const {createComplaint,getAllComplaints,updateComplaintStatus,checkEscalations, 
-    getComplaintAnalytics,trackComplaint, getMyComplaints, getComplaintById, updateComplaint, deleteComplaint } = require("../controller/complaintController");
+    getComplaintAnalytics,trackComplaint, getMyComplaints, getComplaintById, updateComplaint, 
+    deleteComplaint, bulkUpdateByLocation, getComplaintsByLocation } = require("../controller/complaintController");
 const { protect, role } = require("../middleware/authMiddleware");
 const upload = require("../middleware/upload");
 
@@ -17,5 +18,9 @@ router.get("/:id", protect, getComplaintById);
 // Admin-only routes
 router.put("/:id", protect, updateComplaint);
 router.delete("/:id", protect, deleteComplaint);
+
+// Bulk operations
+router.post("/bulk-update", protect, bulkUpdateByLocation);
+router.get("/by-location", protect, getComplaintsByLocation);
 
 module.exports = router;
