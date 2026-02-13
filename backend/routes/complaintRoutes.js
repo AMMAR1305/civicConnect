@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {createComplaint,getAllComplaints,updateComplaintStatus,checkEscalations, 
-    getComplaintAnalytics,trackComplaint, getMyComplaints, getComplaintById } = require("../controller/complaintController");
+    getComplaintAnalytics,trackComplaint, getMyComplaints, getComplaintById, updateComplaint, deleteComplaint } = require("../controller/complaintController");
 const { protect, role } = require("../middleware/authMiddleware");
 const upload = require("../middleware/upload");
 
@@ -13,5 +13,9 @@ router.get("/check-escalations", protect,checkEscalations);
 router.get("/analytics",protect,getComplaintAnalytics);
 router.get("/track/:id",protect,trackComplaint);
 router.get("/:id", protect, getComplaintById);
+
+// Admin-only routes
+router.put("/:id", protect, updateComplaint);
+router.delete("/:id", protect, deleteComplaint);
 
 module.exports = router;

@@ -1,0 +1,275 @@
+/*
+ * ============================================
+ *  POPUP SYSTEM ARCHITECTURE
+ * ============================================
+ * 
+ * COMPONENT HIERARCHY:
+ * ====================
+ * 
+ *  AdminDashboard (Main Component)
+ *  │
+ *  ├── Navbar
+ *  │   ├── Profile Button ("B") ────┐
+ *  │   └── Bell Icon ────────────────┤
+ *  │                                  │
+ *  ├── Main Content                  │
+ *  │   └── [Dashboard Content]       │
+ *  │                                  │
+ *  └── Popups (Fixed Position)       │
+ *      ├── ProfilePopup ←────────────┘
+ *      │   ├── Backdrop (Blur)
+ *      │   └── Panel
+ *      │       ├── Header
+ *      │       ├── Body
+ *      │       │   ├── Avatar
+ *      │       │   ├── User Info
+ *      │       │   └── Action Buttons
+ *      │       └── (Optional Footer)
+ *      │
+ *      └── NotificationPopup ←────────┐
+ *          ├── Backdrop (Blur)        │
+ *          └── Panel                  │
+ *              ├── Header              │
+ *              ├── Body                │
+ *              │   └── Notification List
+ *              └── Footer              │
+ * 
+ * 
+ * STATE FLOW:
+ * ===========
+ * 
+ *  User Action          State Change         UI Update
+ *  ───────────          ────────────         ─────────
+ *  
+ *  Click Profile   →   showProfile: true   →  Profile Popup Opens
+ *  Button              showNotifications:      + Backdrop appears
+ *                      false                   + Background blurs
+ *                                              + Content blocks clicks
+ *  
+ *  Click Outside   →   showProfile: false  →  Profile Popup Closes
+ *  Backdrop                                    + Backdrop fades out
+ *                                              + Background unblurs
+ *                                              + Content clickable again
+ *  
+ *  Click Bell      →   showNotifications:  →  Notification Popup Opens
+ *  Icon                true                    + Profile closes first
+ *                      showProfile: false      + Backdrop appears
+ *                                              + Background blurs
+ * 
+ * 
+ * Z-INDEX LAYERING:
+ * =================
+ * 
+ *  Layer 9999: ┌──────────────────────┐
+ *              │   Popup Panels       │ ← Front (Clickable)
+ *              │  - ProfilePopup      │
+ *              │  - NotificationPopup │
+ *              └──────────────────────┘
+ *  
+ *  Layer 9998: ┌──────────────────────┐
+ *              │   Blurred Backdrop   │ ← Middle (Blocks clicks)
+ *              │  + backdrop-filter   │
+ *              │  + rgba(0,0,0,0.4)   │
+ *              └──────────────────────┘
+ *  
+ *  Layer 1-100:┌──────────────────────┐
+ *              │  Regular Content     │ ← Back (Blurred when popup open)
+ *              │  - Navbar            │
+ *              │  - Dashboard         │
+ *              │  - Cards/Tables      │
+ *              └──────────────────────┘
+ * 
+ * 
+ * CSS ANIMATIONS:
+ * ===============
+ * 
+ *  Backdrop:
+ *  ┌─────────────────────────────────┐
+ *  │ fadeIn (0.3s)                   │
+ *  │ opacity: 0 ──→ opacity: 1       │
+ *  └─────────────────────────────────┘
+ *  
+ *  Popup Panel:
+ *  ┌─────────────────────────────────┐
+ *  │ slideInScale (0.3s)             │
+ *  │ transform: translateY(-20px)    │
+ *  │           scale(0.95)           │
+ *  │         ──→                     │
+ *  │ transform: translateY(0)        │
+ *  │           scale(1)              │
+ *  └─────────────────────────────────┘
+ *  
+ *  Notification Items:
+ *  ┌─────────────────────────────────┐
+ *  │ slideInLeft (0.3s, staggered)   │
+ *  │ transform: translateX(-20px)    │
+ *  │         ──→                     │
+ *  │ transform: translateX(0)        │
+ *  └─────────────────────────────────┘
+ * 
+ * 
+ * EVENT HANDLING:
+ * ===============
+ * 
+ *  ProfileButton.onClick()
+ *  │
+ *  ├─→ setState({ showProfile: true, showNotifications: false })
+ *  │
+ *  └─→ Renders:
+ *      ├─→ <div className="popup-backdrop" onClick={onClose}>
+ *      └─→ <div className="popup-panel">
+ * 
+ *  backdrop.onClick()
+ *  │
+ *  └─→ onClose()
+ *      └─→ setState({ showProfile: false })
+ *          └─→ Component unmounts (isOpen = false)
+ * 
+ * 
+ * RESPONSIVE BEHAVIOR:
+ * ====================
+ * 
+ *  Desktop (> 640px):
+ *  ┌────────────────────────────────────┐
+ *  │ Navbar                    [B] [🔔] │
+ *  │                              │      │
+ *  │                          ┌───┴────┐ │
+ *  │ Content                  │ Popup  │ │
+ *  │                          │ Panel  │ │
+ *  │                          └────────┘ │
+ *  └────────────────────────────────────┘
+ *  
+ *  Mobile (≤ 640px):
+ *  ┌──────────────────┐
+ *  │ Nav      [B] [🔔]│
+ *  ├──────────────────┤
+ *  │ ┌──────────────┐ │
+ *  │ │ Full-width   │ │
+ *  │ │ Popup Panel  │ │
+ *  │ │              │ │
+ *  │ └──────────────┘ │
+ *  │                  │
+ *  │ Content (Blurred)│
+ *  └──────────────────┘
+ * 
+ * 
+ * FILE DEPENDENCIES:
+ * ==================
+ * 
+ *  AdminDashboard.jsx
+ *  │
+ *  ├─→ import ProfilePopup from '../Components/ProfilePopup'
+ *  ├─→ import NotificationPopup from '../Components/NotificationPopup'
+ *  ├─→ import './AdminDashboard.css'
+ *  └─→ import '../Components/Popup.css'
+ * 
+ *  ProfilePopup.jsx
+ *  │
+ *  ├─→ import { Settings, X, User, Mail, Shield, LogOut } from 'lucide-react'
+ *  ├─→ import { useNavigate } from 'react-router-dom'
+ *  └─→ CSS: Popup.css (shared)
+ * 
+ *  NotificationPopup.jsx
+ *  │
+ *  ├─→ import { Bell, X, AlertTriangle, CheckCircle, Info, Clock, Trash2, Check } from 'lucide-react'
+ *  └─→ CSS: Popup.css (shared)
+ * 
+ *  Popup.css (Shared Styles)
+ *  │
+ *  ├─→ .popup-backdrop
+ *  ├─→ .popup-panel
+ *  ├─→ .profile-popup
+ *  ├─→ .notification-popup
+ *  └─→ @keyframes (fadeIn, slideInScale, slideInLeft)
+ * 
+ * 
+ * PROPS INTERFACE:
+ * ================
+ * 
+ *  ProfilePopup:
+ *  {
+ *    user: {
+ *      Name: string,
+ *      Email: string
+ *    },
+ *    isOpen: boolean,
+ *    onClose: () => void
+ *  }
+ * 
+ *  NotificationPopup:
+ *  {
+ *    notifications: Array<{
+ *      _id: string,
+ *      title: string,
+ *      description: string,
+ *      type?: string,
+ *      status?: string,
+ *      createdAt: Date
+ *    }>,
+ *    isOpen: boolean,
+ *    onClose: () => void,
+ *    onClearAll?: () => void,
+ *    onMarkAsRead?: (notification) => void
+ *  }
+ * 
+ * 
+ * ACCESSIBILITY FEATURES:
+ * =======================
+ * 
+ *  ✓ ARIA labels on buttons (aria-label="Profile")
+ *  ✓ Semantic HTML (header, nav, button, etc.)
+ *  ✓ Keyboard navigation (Tab, Enter, Escape)
+ *  ✓ Focus management (auto-focus on open)
+ *  ✓ Screen reader announcements
+ *  ✓ Color contrast (WCAG AA compliant)
+ *  ✓ Reduced motion support (@media prefers-reduced-motion)
+ * 
+ * 
+ * PERFORMANCE OPTIMIZATIONS:
+ * ==========================
+ * 
+ *  1. Conditional Rendering:
+ *     if (!isOpen) return null; ← Early return prevents rendering
+ *  
+ *  2. CSS Hardware Acceleration:
+ *     transform: translateZ(0); ← GPU rendering
+ *  
+ *  3. Event Delegation:
+ *     Single backdrop click handler instead of multiple listeners
+ *  
+ *  4. CSS Animations:
+ *     Prefer transform/opacity over layout properties
+ *  
+ *  5. Lazy Loading:
+ *     Components only render when needed
+ * 
+ * 
+ * BROWSER COMPATIBILITY:
+ * ======================
+ * 
+ *  Feature              Chrome  Firefox  Safari  Edge
+ *  ───────────────────  ──────  ───────  ──────  ────
+ *  backdrop-filter      ✓ 76+   ✓ 103+   ✓ 9+    ✓ 79+
+ *  CSS Grid             ✓       ✓        ✓       ✓
+ *  Flexbox              ✓       ✓        ✓       ✓
+ *  CSS Animations       ✓       ✓        ✓       ✓
+ *  React 18+            ✓       ✓        ✓       ✓
+ * 
+ * 
+ * TESTING CHECKLIST:
+ * ==================
+ * 
+ *  □ Profile button opens profile popup
+ *  □ Bell icon opens notification popup
+ *  □ Click outside closes popup
+ *  □ Background is blurred when popup is open
+ *  □ Background is not clickable when popup is open
+ *  □ Only one popup open at a time
+ *  □ Animations play smoothly
+ *  □ Responsive on mobile
+ *  □ Works with keyboard navigation
+ *  □ Screen reader announces changes
+ *  □ No console errors
+ *  □ Works in all major browsers
+ * 
+ */

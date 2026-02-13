@@ -1,7 +1,15 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useState, useMemo, useCallback } from "react";
 import api from "../Services/api";
 import { useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
+import "../Components/Popup.css";
+import ProfilePopup from "../Components/ProfilePopup";
+import NotificationPopup from "../Components/NotificationPopup";
+import ComplaintDetailsPopup from "../Components/ComplaintDetailsPopup";
+import ReassignModal from "../Components/ReassignModal";
+import EditComplaintModal from "../Components/EditComplaintModal";
+import DeleteConfirmModal from "../Components/DeleteConfirmModal";
+import LazyImage from "../Components/LazyImage";
 import { LayoutDashboard, FileText, CheckCircle, Clock, AlertTriangle, Users, Shield, TrendingUp, TrendingDown, Activity, Settings, Download, RefreshCw, Search, UserPlus, BarChart3, Bell, X, Eye, Edit, Trash2, Save, Lock, Unlock, Database, Sliders, MapPin, Megaphone, AlertOctagon, FileSpreadsheet, History, UserCog, Target, Zap, Map as MapIcon, Send } from "lucide-react";
 
 const AdminDashboard = () => {
@@ -26,12 +34,49 @@ const AdminDashboard = () => {
     // Selected items for inline details
     selectedOfficerId: null,
     selectedCitizenId: null,
+    selectedComplaint: null, // For complaint details popup
     showAddOfficerForm: false,
-    showAddUserForm: false
+    showAddUserForm: false,
+    // Complaint editing and reassignment
+    showReassignModal: false,
+    reassignComplaintId: null,
+    editingComplaint: null,
+    showEditModal: false,
+    showDeleteModal: false,
+    deletingComplaint: null,
+    isDeleting: false,
+    complaintsPerPage: 12 // Pagination control
   });
   const navigate = useNavigate();
   
-  const updateState = (updates) => setState(prev => ({ ...prev, ...updates }));
+  const updateState = useCallback((updates) => setState(prev => ({ ...prev, ...updates })), []);
+  
+  // Memoize filtered complaints for better performance
+  const filteredComplaints = useMemo(() => {
+    if (!state.complaints || state.complaints.length === 0) return [];
+    
+    return state.complaints.filter(c => {
+      const matchesSearch = !state.searchTerm || 
+        c.title?.toLowerCase().includes(state.searchTerm.toLowerCase()) || 
+        c.description?.toLowerCase().includes(state.searchTerm.toLowerCase());
+      const matchesStatus = state.filterStatus === 'all' || c.status === state.filterStatus;
+      const matchesCategory = state.categoryFilter === 'all' || c.category === state.categoryFilter;
+      const matchesOfficer = state.officerFilter === 'all' || 
+                            (state.officerFilter === 'assigned' && c.assignedOfficer) ||
+                            (state.officerFilter === 'unassigned' && !c.assignedOfficer);
+      return matchesSearch && matchesStatus && matchesCategory && matchesOfficer;
+    });
+  }, [state.complaints, state.searchTerm, state.filterStatus, state.categoryFilter, state.officerFilter]);
+
+  // Debounced search to improve performance
+  const [searchInput, setSearchInput] = useState('');
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateState({ searchTerm: searchInput });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput, updateState]);
 
   useEffect(() => { loadData(); }, []);
 
@@ -50,12 +95,21 @@ const AdminDashboard = () => {
       ]);
 
       // Get user info from token (reusing existing token variable)
-      let currentUser = { Name: 'Admin', Email: '' };
+      let currentUser = { Name: 'Admin', Email: '', Role: 'admin' };
       if (token) {
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
-          currentUser = { Name: payload.Name || 'Admin', Email: payload.Email || '' };
-        } catch (e) { console.log('Token parse error'); }
+          const userRole = (payload.Role || payload.role || '').toLowerCase();
+          currentUser = { 
+            Name: payload.Name || 'Admin', 
+            Email: payload.Email || '',
+            Role: userRole || 'admin' // Extract role from token, default to admin
+          };
+          console.log('User Role:', currentUser.Role); // Debug log
+        } catch (e) { 
+          console.log('Token parse error:', e); 
+          currentUser.Role = 'admin'; // Default to admin if token parse fails
+        }
       }
 
       const complaints = complaintsRes.data || [];
@@ -225,6 +279,119 @@ const AdminDashboard = () => {
         console.error('Error adding officer:', error);
         alert(error.response?.data?.message || 'Failed to add officer');
       }
+    },
+    // Complaint management actions
+    editComplaint: (complaint) => {
+      // Check if user is admin
+      if (state.currentUser.Role !== 'admin') {
+        alert('Access denied. Only administrators can edit complaints.');
+        return;
+      }
+      
+      updateState({ 
+        editingComplaint: complaint,
+        selectedComplaint: null,
+        showEditModal: true
+      });
+    },
+    performEdit: async (complaint, formData) => {
+      // Check if user is admin
+      if (state.currentUser.Role !== 'admin') {
+        throw new Error('Access denied. Only administrators can edit complaints.');
+      }
+      
+      try {
+        const token = localStorage.getItem("token");
+        
+        const response = await api.put(`/complaints/${complaint._id}`, formData, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        alert('Complaint updated successfully!');
+        updateState({ showEditModal: false, editingComplaint: null });
+        loadData(); // Refresh data
+      } catch (error) {
+        console.error('Error updating complaint:', error);
+        throw new Error(error.response?.data?.message || 'Failed to update complaint');
+      }
+    },
+    reassignComplaint: (complaint) => {
+      // Check if user is admin
+      if (state.currentUser.Role !== 'admin') {
+        alert('Access denied. Only administrators can reassign complaints.');
+        return;
+      }
+      
+      updateState({ 
+        showReassignModal: true,
+        reassignComplaintId: complaint._id,
+        selectedComplaint: null 
+      });
+    },
+    performReassign: async (complaint, officerId) => {
+      // Check if user is admin
+      if (state.currentUser.Role !== 'admin') {
+        alert('Access denied. Only administrators can reassign complaints.');
+        return;
+      }
+      
+      try {
+        const token = localStorage.getItem("token");
+        
+        const response = await api.put(`/complaints/${complaint._id}`, {
+          assignedOfficer: officerId,
+          status: 'Assigned'
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const selectedOfficer = state.officers.find(o => o._id === officerId);
+        alert(`Complaint reassigned to ${selectedOfficer?.Name || 'Officer'} successfully!`);
+        updateState({ showReassignModal: false, reassignComplaintId: null });
+        loadData(); // Refresh data
+      } catch (error) {
+        console.error('Error reassigning complaint:', error);
+        alert(error.response?.data?.message || 'Failed to reassign complaint');
+      }
+    },
+    deleteComplaint: async (complaint) => {
+      // Check if user is admin
+      if (state.currentUser.Role !== 'admin') {
+        alert('Access denied. Only administrators can delete complaints.');
+        return;
+      }
+      
+      // Open confirmation modal
+      updateState({ 
+        showDeleteModal: true,
+        deletingComplaint: complaint,
+        selectedComplaint: null
+      });
+    },
+    performDelete: async () => {
+      if (!state.deletingComplaint) return;
+      
+      updateState({ isDeleting: true });
+      
+      try {
+        const token = localStorage.getItem("token");
+        
+        await api.delete(`/complaints/${state.deletingComplaint._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        alert('Complaint deleted successfully!');
+        updateState({ 
+          showDeleteModal: false, 
+          deletingComplaint: null,
+          isDeleting: false
+        });
+        loadData(); // Refresh data
+      } catch (error) {
+        console.error('Error deleting complaint:', error);
+        alert(error.response?.data?.message || 'Failed to delete complaint');
+        updateState({ isDeleting: false });
+      }
     }
   };
 
@@ -244,7 +411,287 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <div className="admin-dashboard min-h-screen bg-gradient-to-br from-blue-50 to-orange-50">
+    <div className="admin-dashboard min-h-screen bg-gradient-to-br from-blue-50 to-orange-50 relative overflow-hidden">
+      
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Floating Geometric Shapes */}
+        <div className="absolute top-20 left-10 animate-float-slow opacity-10">
+          <div className="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg rotate-12 shadow-lg"></div>
+        </div>
+        
+        <div className="absolute top-40 right-20 animate-float opacity-15">
+          <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full shadow-lg"></div>
+        </div>
+
+        <div className="absolute bottom-32 left-1/4 animate-float-slow opacity-12">
+          <div className="w-16 h-16 bg-gradient-to-br from-indigo-400 to-indigo-600 transform rotate-45 shadow-lg"></div>
+        </div>
+
+        <div className="absolute top-1/3 right-10 animate-float opacity-18">
+          <div className="w-14 h-28 bg-gradient-to-br from-purple-400 to-purple-600 rounded-t-full shadow-lg"></div>
+        </div>
+
+        <div className="absolute bottom-20 right-1/3 animate-float-slow opacity-15">
+          <div className="w-32 h-8 bg-gradient-to-r from-green-400 to-green-600 rounded-full shadow-lg"></div>
+        </div>
+
+        {/* Smart Civic Icons with Enhanced Styling */}
+        <div className="absolute top-60 left-1/3 animate-float opacity-20">
+          <div className="p-4 bg-white bg-opacity-20 rounded-full backdrop-blur-sm shadow-xl">
+            <BarChart3 className="w-12 h-12 text-blue-700" />
+          </div>
+        </div>
+
+        <div className="absolute bottom-40 left-20 animate-float-slow opacity-25">
+          <div className="p-4 bg-white bg-opacity-20 rounded-full backdrop-blur-sm shadow-xl">
+            <Shield className="w-14 h-14 text-green-700" />
+          </div>
+        </div>
+
+        <div className="absolute top-80 right-1/4 animate-float opacity-15">
+          <div className="p-3 bg-white bg-opacity-20 rounded-full backdrop-blur-sm shadow-xl">
+            <Users className="w-10 h-10 text-purple-700" />
+          </div>
+        </div>
+
+        <div className="absolute top-1/2 left-16 animate-float-slow opacity-20">
+          <div className="p-4 bg-white bg-opacity-20 rounded-full backdrop-blur-sm shadow-xl">
+            <FileText className="w-12 h-12 text-orange-700" />
+          </div>
+        </div>
+
+        <div className="absolute bottom-60 right-16 animate-float opacity-18">
+          <div className="p-3 bg-white bg-opacity-20 rounded-full backdrop-blur-sm shadow-xl">
+            <Target className="w-11 h-11 text-red-600" />
+          </div>
+        </div>
+
+        {/* Digital Governance Themed Elements */}
+        <div className="absolute top-32 right-1/3 animate-float-slow opacity-12">
+          <div className="relative">
+            <div className="w-20 h-16 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-lg shadow-lg opacity-80"></div>
+            <div className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-400 rounded-full animate-ping"></div>
+          </div>
+        </div>
+
+        <div className="absolute bottom-80 left-1/2 animate-float opacity-16">
+          <div className="flex space-x-2">
+            <div className="w-4 h-12 bg-gradient-to-t from-blue-500 to-blue-300 rounded-full"></div>
+            <div className="w-4 h-8 bg-gradient-to-t from-green-500 to-green-300 rounded-full"></div>
+            <div className="w-4 h-16 bg-gradient-to-t from-orange-500 to-orange-300 rounded-full"></div>
+          </div>
+        </div>
+
+        {/* Sophisticated Animated Blobs */}
+        <div className="absolute top-1/4 left-1/3 w-40 h-40 bg-gradient-to-br from-blue-300 via-blue-400 to-indigo-500 rounded-full mix-blend-multiply filter blur-2xl opacity-15 animate-blob"></div>
+        <div className="absolute top-1/2 right-1/4 w-48 h-48 bg-gradient-to-br from-orange-300 via-orange-400 to-red-500 rounded-full mix-blend-multiply filter blur-2xl opacity-12 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-1/4 left-1/2 w-44 h-44 bg-gradient-to-br from-purple-300 via-purple-400 to-indigo-500 rounded-full mix-blend-multiply filter blur-2xl opacity-15 animate-blob animation-delay-4000"></div>
+        <div className="absolute top-1/6 right-1/6 w-36 h-36 bg-gradient-to-br from-green-300 via-emerald-400 to-teal-500 rounded-full mix-blend-multiply filter blur-2xl opacity-13 animate-blob animation-delay-1000"></div>
+        
+        {/* Smart City Grid Pattern */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-5 smart-grid">
+          <div className="absolute top-1/4 left-1/4 transform rotate-12">
+            <div className="grid grid-cols-3 gap-2">
+              {[...Array(9)].map((_, i) => (
+                <div key={i} className="w-3 h-3 bg-blue-600 rounded-sm animate-pulse" style={{animationDelay: `${i * 0.5}s`}}></div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Digital Government Illustration Elements */}
+          <div className="absolute bottom-1/4 right-1/4 transform -rotate-12 opacity-8">
+            <div className="relative">
+              <div className="w-32 h-20 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-lg shadow-lg opacity-60"></div>
+              <div className="absolute top-2 left-2 w-28 h-16 bg-white bg-opacity-90 rounded-lg flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-4 h-4 bg-blue-500 rounded-full mx-auto mb-1 animate-pulse"></div>
+                  <div className="h-1 bg-gray-300 rounded w-16 mx-auto mb-1"></div>
+                  <div className="h-1 bg-gray-300 rounded w-12 mx-auto"></div>
+                </div>
+              </div>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-400 rounded-full animate-bounce-subtle"></div>
+              <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-orange-400 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+          
+          {/* Connecting Lines */}
+          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 opacity-10">
+            <svg width="200" height="100" viewBox="0 0 200 100">
+              <defs>
+                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.5">
+                    <animate attributeName="stop-opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
+                  </stop>
+                  <stop offset="50%" stopColor="#8B5CF6" stopOpacity="0.8">
+                    <animate attributeName="stop-opacity" values="0.8;0.3;0.8" dur="3s" repeatCount="indefinite"/>
+                  </stop>
+                  <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.5">
+                    <animate attributeName="stop-opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
+                  </stop>
+                </linearGradient>
+              </defs>
+              <path d="M10,50 Q50,10 100,50 T190,50" stroke="url(#lineGradient)" strokeWidth="2" fill="none"/>
+              <circle cx="10" cy="50" r="3" fill="#3B82F6" opacity="0.7">
+                <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="100" cy="50" r="3" fill="#8B5CF6" opacity="0.7">
+                <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite" begin="0.7s"/>
+              </circle>
+              <circle cx="190" cy="50" r="3" fill="#F59E0B" opacity="0.7">
+                <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite" begin="1.4s"/>
+              </circle>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Animation Styles */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { 
+            transform: translateY(0px) translateX(0px) rotate(0deg); 
+          }
+          25% { 
+            transform: translateY(-15px) translateX(5px) rotate(2deg); 
+          }
+          50% { 
+            transform: translateY(-25px) translateX(0px) rotate(5deg); 
+          }
+          75% { 
+            transform: translateY(-15px) translateX(-5px) rotate(2deg); 
+          }
+        }
+        @keyframes float-slow {
+          0%, 100% { 
+            transform: translateY(0px) translateX(0px) rotate(0deg) scale(1); 
+          }
+          25% { 
+            transform: translateY(-20px) translateX(-7px) rotate(-2deg) scale(1.05); 
+          }
+          50% { 
+            transform: translateY(-35px) translateX(0px) rotate(-5deg) scale(1.1); 
+          }
+          75% { 
+            transform: translateY(-20px) translateX(7px) rotate(-2deg) scale(1.05); 
+          }
+        }
+        @keyframes blob {
+          0%, 100% { 
+            transform: translate(0px, 0px) scale(1) rotate(0deg); 
+          }
+          25% { 
+            transform: translate(25px, -40px) scale(1.1) rotate(90deg); 
+          }
+          50% { 
+            transform: translate(50px, -80px) scale(1.3) rotate(180deg); 
+          }
+          75% { 
+            transform: translate(-25px, -40px) scale(1.1) rotate(270deg); 
+          }
+        }
+        @keyframes pulse-glow {
+          0%, 100% { 
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); 
+            transform: scale(1); 
+          }
+          50% { 
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); 
+            transform: scale(1.05); 
+          }
+        }
+        @keyframes slide-in-elegant {
+          0% { 
+            transform: translateX(-100px) rotate(-10deg); 
+            opacity: 0; 
+          }
+          100% { 
+            transform: translateX(0px) rotate(0deg); 
+            opacity: 1; 
+          }
+        }
+        @keyframes bounce-subtle {
+          0%, 20%, 50%, 80%, 100% { 
+            transform: translateY(0); 
+          }
+          40% { 
+            transform: translateY(-8px); 
+          }
+          60% { 
+            transform: translateY(-4px); 
+          }
+        }
+        
+        .animate-float {
+          animation: float 8s ease-in-out infinite;
+        }
+        .animate-float-slow {
+          animation: float-slow 12s ease-in-out infinite;
+        }
+        .animate-blob {
+          animation: blob 20s ease-in-out infinite;
+        }
+        .animate-pulse-glow {
+          animation: pulse-glow 3s ease-in-out infinite;
+        }
+        .animate-slide-in {
+          animation: slide-in-elegant 1s ease-out;
+        }
+        .animate-bounce-subtle {
+          animation: bounce-subtle 2s ease-in-out infinite;
+        }
+        
+        .animation-delay-1000 {
+          animation-delay: 1s;
+        }
+        .animation-delay-2000 {
+          animation-delay: 3s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 6s;
+        }
+        
+        /* Enhanced Card Animations */
+        .dashboard-card {
+          transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .dashboard-card:hover {
+          transform: translateY(-8px) scale(1.02);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Advanced Stats Card Animation */
+        .stats-card {
+          transition: all 0.5s ease;
+          animation: subtle-pulse 6s ease-in-out infinite;
+        }
+        .stats-card:hover {
+          animation-play-state: paused;
+          transform: scale(1.05) rotateY(5deg);
+          box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+        
+        @keyframes subtle-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.95; }
+        }
+
+        /* Smart Digital Governance Theme */
+        .governance-glow {
+          animation: pulse-glow 4s ease-in-out infinite;
+        }
+        
+        /* Background Pattern Animation */
+        .smart-grid {
+          animation: grid-pulse 8s ease-in-out infinite;
+        }
+        
+        @keyframes grid-pulse {
+          0%, 100% { opacity: 0.05; }
+          50% { opacity: 0.15; }
+        }
+      `}</style>
+
       {/* Mobile Sidebar - Full Screen Overlay */}
       {state.mobileMenuOpen && (
         <div 
@@ -272,7 +719,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Header - Citizen Theme - Mobile Responsive */}
-      <div className="bg-white shadow-md border-b border-gray-200">
+      <div className="bg-white shadow-md border-b border-gray-200 relative z-10 animate-slide-in">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-4">
           <div className="flex items-center justify-between gap-1 sm:gap-2">
             <div className="flex items-center gap-1 sm:gap-2 flex-1 min-w-0">
@@ -285,37 +732,49 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              <div className="relative hidden sm:block">
-                <button onClick={() => updateState({ showUserProfile: !state.showUserProfile })} className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all font-bold text-base sm:text-lg shadow-md">
-                  {state.currentUser.Name?.charAt(0) || 'A'}
-                </button>
-                {state.showUserProfile && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-2xl border-2 border-gray-200 z-50 p-4">
-                    <div className="text-center mb-3"><div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-2xl mb-2">{state.currentUser.Name?.charAt(0) || 'A'}</div><h3 className="font-bold text-gray-800">{state.currentUser.Name}</h3><p className="text-sm text-gray-600">{state.currentUser.Email}</p><span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium mt-2">Administrator</span></div>
-                    <div className="border-t pt-3 space-y-2"><button onClick={() => navigate('/profile')} className="w-full flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"><Settings className="w-4 h-4" /><span>Profile Settings</span></button><button onClick={() => localStorage.clear() || navigate('/')} className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg"><X className="w-4 h-4" /><span>Logout</span></button></div>
-                  </div>
+              {/* Profile Button */}
+              <button 
+                onClick={() => updateState({ 
+                  showUserProfile: !state.showUserProfile,
+                  showNotifications: false // Close notifications when opening profile
+                })} 
+                className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg transition-all font-bold text-base sm:text-lg shadow-md"
+                aria-label="Profile"
+              >
+                {state.currentUser.Name?.charAt(0) || 'B'}
+              </button>
+
+              {/* Notification Bell Button */}
+              <button 
+                onClick={() => updateState({ 
+                  showNotifications: !state.showNotifications,
+                  showUserProfile: false // Close profile when opening notifications
+                })} 
+                className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative ${slaBreaches.length > 0 ? 'animate-bounce-subtle' : ''}`}
+                aria-label="Notifications"
+              >
+                <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
+                {slaBreaches.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[10px] sm:text-xs rounded-full flex items-center justify-center animate-pulse governance-glow">
+                    {slaBreaches.length}
+                  </span>
                 )}
-              </div>
-              <div className="relative">
-                <button onClick={() => updateState({ showNotifications: !state.showNotifications })} className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors relative">
-                  <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {slaBreaches.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[10px] sm:text-xs rounded-full flex items-center justify-center animate-pulse">{slaBreaches.length}</span>}
-                </button>
-                {state.showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl border-2 border-gray-200 z-50 max-h-96 overflow-y-auto">
-                    <div className="p-4 border-b"><h3 className="font-bold text-gray-800">Notifications</h3></div>
-                    {slaBreaches.length > 0 ? slaBreaches.slice(0, 5).map(b => (
-                      <div key={b._id} className="p-4 hover:bg-red-50 cursor-pointer border-b">
-                        <div className="flex items-start gap-3"><AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" /><div><p className="text-sm font-medium text-gray-900">{b.title}</p><p className="text-xs text-red-600 mt-1">SLA Breach</p></div></div>
-                      </div>
-                    )) : <div className="p-8 text-center text-gray-500"><Bell className="w-12 h-12 mx-auto mb-2 text-gray-300" /><p>No notifications</p></div>}
-                  </div>
-                )}
-              </div>
-              <button onClick={loadData} className="hidden sm:flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+              </button>
+
+              {/* Refresh Button */}
+              <button 
+                onClick={loadData} 
+                className="hidden sm:flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors dashboard-card"
+                aria-label="Refresh"
+              >
                 <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-              <button onClick={() => localStorage.clear() || navigate("/")} className="bg-gradient-to-r from-orange-400 to-orange-500 text-white px-2 sm:px-6 py-1 sm:py-2 rounded-lg hover:from-orange-500 hover:to-orange-600 font-semibold transition-all duration-300 shadow-md text-xs sm:text-base">
+
+              {/* Logout Button */}
+              <button 
+                onClick={() => localStorage.clear() || navigate("/login")} 
+                className="bg-gradient-to-r from-orange-400 to-orange-500 text-white px-2 sm:px-6 py-1 sm:py-2 rounded-lg hover:from-orange-500 hover:to-orange-600 font-semibold transition-all duration-300 shadow-md text-xs sm:text-base"
+              >
                 Logout
               </button>
             </div>
@@ -323,7 +782,7 @@ const AdminDashboard = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-2 sm:px-6 py-3 sm:py-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6 py-3 sm:py-8 relative z-10 animate-slide-in" style={{ animationDelay: '0.2s' }}>
         {/* Stats Cards - Citizen Theme with colored borders - Mobile Responsive */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-4 md:gap-6 mb-3 sm:mb-8">
           {[
@@ -335,7 +794,11 @@ const AdminDashboard = () => {
           ].map((stat, i) => {
             const Icon = stat.icon;
             return (
-              <div key={i} className={`bg-white p-3 sm:p-5 md:p-6 rounded-xl shadow-lg border-t-4 ${stat.border} hover:shadow-xl transition-shadow`}>
+              <div 
+                key={i} 
+                className={`bg-white p-3 sm:p-5 md:p-6 rounded-xl shadow-lg border-t-4 ${stat.border} hover:shadow-xl transition-shadow dashboard-card stats-card governance-glow animate-slide-in`}
+                style={{ animationDelay: `${i * 0.1}s` }}
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <div className={`w-8 h-8 sm:w-12 sm:h-12 ${stat.color} flex items-center justify-center`}>
                     <Icon className="w-5 h-5 sm:w-8 sm:h-8" />
@@ -1262,7 +1725,7 @@ const AdminDashboard = () => {
                     )}
                   </div>
                   <div className="flex gap-3 flex-wrap">
-                    <input type="text" placeholder="Search complaints..." value={state.searchTerm} onChange={(e) => updateState({ searchTerm: e.target.value })} className="px-4 py-2 border-2 border-gray-300 rounded-lg" />
+                    <input type="text" placeholder="Search complaints..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="px-4 py-2 border-2 border-gray-300 rounded-lg" />
                     <select value={state.categoryFilter} onChange={(e) => updateState({ categoryFilter: e.target.value })} className="px-4 py-2 border-2 border-gray-300 rounded-lg">
                       <option value="all">All Categories</option>
                       {categoryStats.map(cat => <option key={cat.category} value={cat.category}>{cat.category}</option>)}
@@ -1285,16 +1748,16 @@ const AdminDashboard = () => {
                 
                 {/* Complaint Cards View - Interactive like Citizen Dashboard */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {complaints.filter(c => {
-                    const matchesSearch = c.title?.toLowerCase().includes(state.searchTerm.toLowerCase()) || c.description?.toLowerCase().includes(state.searchTerm.toLowerCase());
-                    const matchesStatus = state.filterStatus === 'all' || c.status === state.filterStatus;
-                    const matchesCategory = state.categoryFilter === 'all' || c.category === state.categoryFilter;
-                    const matchesOfficer = state.officerFilter === 'all' || 
-                                          (state.officerFilter === 'assigned' && c.assignedOfficer) ||
-                                          (state.officerFilter === 'unassigned' && !c.assignedOfficer);
-                    return matchesSearch && matchesStatus && matchesCategory && matchesOfficer;
-                  }).slice(0, 12).map((c, i) => (
-                    <div key={i} className="bg-white rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all p-5 cursor-pointer" onClick={() => navigate(`/officer/${c._id}`)}>
+                  {filteredComplaints.slice(0, state.complaintsPerPage).map((c, i) => (
+                    <div 
+                      key={c._id || i} 
+                      className="bg-white rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:shadow-xl transition-all p-5 cursor-pointer dashboard-card" 
+                      onClick={() => updateState({ 
+                        selectedComplaint: c,
+                        showUserProfile: false,
+                        showNotifications: false 
+                      })}
+                    >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex items-center gap-2">
                           <div className={`w-3 h-3 rounded-full ${c.status === 'Resolved' ? 'bg-green-500' : c.status === 'In Progress' ? 'bg-blue-500 animate-pulse' : 'bg-yellow-500'}`}></div>
@@ -1342,24 +1805,70 @@ const AdminDashboard = () => {
                         </div>
                       )}
                       
-                      {c.image && <div className="mb-3"><img src={`http://localhost:4000${c.image}`} alt="Complaint" className="w-full h-40 object-cover rounded-lg" /></div>}
+                      {c.image && <div className="mb-3"><LazyImage src={`http://localhost:4000${c.image}`} alt="Complaint" className="w-full h-40 object-cover rounded-lg" loading="lazy" /></div>}
                       
                       <div className="flex gap-2 pt-3 border-t">
-                        <button onClick={(e) => { e.stopPropagation(); navigate(`/officer/${c._id}`); }} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"><Eye className="w-4 h-4" />View Details</button>
-                        <button onClick={(e) => { e.stopPropagation(); alert('Reassign feature'); }} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"><UserCog className="w-4 h-4" /></button>
-                        <button onClick={(e) => { e.stopPropagation(); alert('Edit complaint'); }} className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"><Edit className="w-4 h-4" /></button>
+                        <button 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            updateState({ 
+                              selectedComplaint: c,
+                              showUserProfile: false,
+                              showNotifications: false 
+                            }); 
+                          }} 
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                        >
+                          <Eye className="w-4 h-4" />View Details
+                        </button>
+                        {/* Admin-only actions */}
+                        {state.currentUser.Role === 'admin' && (
+                          <>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                actions.reassignComplaint(c);
+                              }} 
+                              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                              title="Reassign complaint"
+                            >
+                              <UserCog className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                actions.editComplaint(c);
+                              }} 
+                              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                              title="Edit complaint"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
                 
+                {/* Load More Button */}
+                {(() => {
+                  const hasMore = filteredComplaints.length > state.complaintsPerPage;
+                  return hasMore && (
+                    <div className="flex justify-center mt-6">
+                      <button 
+                        onClick={() => updateState({ complaintsPerPage: state.complaintsPerPage + 12 })}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 transition-all"
+                      >
+                        <Download className="w-5 h-5" />
+                        Load More Complaints ({filteredComplaints.length - state.complaintsPerPage} remaining)
+                      </button>
+                    </div>
+                  );
+                })()}
+                
                 {/* Show message if no complaints */}
-                {complaints.filter(c => {
-                  const matchesSearch = c.title?.toLowerCase().includes(state.searchTerm.toLowerCase()) || c.description?.toLowerCase().includes(state.searchTerm.toLowerCase());
-                  const matchesStatus = state.filterStatus === 'all' || c.status === state.filterStatus;
-                  const matchesCategory = state.categoryFilter === 'all' || c.category === state.categoryFilter;
-                  return matchesSearch && matchesStatus && matchesCategory;
-                }).length === 0 && (
+                {filteredComplaints.length === 0 && (
                   <div className="text-center py-16 bg-white rounded-xl border-2 border-gray-200"><FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" /><p className="text-lg font-medium text-gray-600">No complaints found</p><p className="text-sm text-gray-500 mt-2">Try adjusting your filters or search terms</p></div>
                 )}
               </div>
@@ -1471,6 +1980,72 @@ const AdminDashboard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Profile Popup with Blur Backdrop */}
+      <ProfilePopup 
+        user={state.currentUser}
+        isOpen={state.showUserProfile}
+        onClose={() => updateState({ showUserProfile: false })}
+      />
+
+      {/* Notification Popup with Blur Backdrop */}
+      <NotificationPopup 
+        notifications={slaBreaches}
+        isOpen={state.showNotifications}
+        onClose={() => updateState({ showNotifications: false })}
+        onClearAll={() => {
+          // Clear all notifications logic
+          console.log('Clear all notifications');
+          updateState({ showNotifications: false });
+        }}
+        onMarkAsRead={(notification) => {
+          // Mark as read logic
+          console.log('Mark as read:', notification);
+        }}
+      />
+
+      {/* Complaint Details Popup with Blur Backdrop */}
+      <ComplaintDetailsPopup 
+        complaint={state.selectedComplaint}
+        isOpen={!!state.selectedComplaint}
+        onClose={() => updateState({ selectedComplaint: null })}
+        onEdit={actions.editComplaint}
+        onReassign={actions.reassignComplaint}
+        onDelete={actions.deleteComplaint}
+        isAdmin={state.currentUser.Role === 'admin'}
+      />
+
+      {/* Reassign Modal - Only for admins */}
+      {state.currentUser.Role === 'admin' && (
+        <ReassignModal 
+          isOpen={state.showReassignModal}
+          onClose={() => updateState({ showReassignModal: false, reassignComplaintId: null })}
+          complaint={state.complaints.find(c => c._id === state.reassignComplaintId)}
+          officers={state.officers}
+          onReassign={actions.performReassign}
+        />
+      )}
+
+      {/* Edit Complaint Modal - Only for admins */}
+      {state.currentUser.Role === 'admin' && (
+        <EditComplaintModal 
+          isOpen={state.showEditModal}
+          onClose={() => updateState({ showEditModal: false, editingComplaint: null })}
+          complaint={state.editingComplaint}
+          onSave={actions.performEdit}
+        />
+      )}
+
+      {/* Delete Confirm Modal - Only for admins */}
+      {state.currentUser.Role === 'admin' && (
+        <DeleteConfirmModal 
+          isOpen={state.showDeleteModal}
+          onClose={() => updateState({ showDeleteModal: false, deletingComplaint: null, isDeleting: false })}
+          onConfirm={actions.performDelete}
+          complaint={state.deletingComplaint}
+          isDeleting={state.isDeleting}
+        />
       )}
     </div>
   );

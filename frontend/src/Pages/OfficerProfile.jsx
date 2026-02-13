@@ -133,7 +133,7 @@ const OfficerProfile = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        navigate("/");
+        navigate("/login");
         return;
       }
 
@@ -270,7 +270,7 @@ const OfficerProfile = () => {
 
   const handleLogout = () => {
     localStorage.clear();
-    navigate("/");
+    navigate("/login");
   };
 
   if (loading) {

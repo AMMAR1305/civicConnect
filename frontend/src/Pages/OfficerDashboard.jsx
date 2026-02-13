@@ -136,7 +136,7 @@ const OfficerDashboard = () => {
 
   const logout = () => {
     localStorage.clear();
-    navigate("/");
+    navigate("/login");
   };
 
   const stats = getStats();

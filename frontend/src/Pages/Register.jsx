@@ -33,7 +33,7 @@ const Register = () => {
       setMessage("Registration successful! Redirecting to login...");
 
       setTimeout(() => {
-        navigate("/");
+        navigate("/login");
       }, 1500);
     } catch (error) {
       setType("error");
@@ -304,7 +304,7 @@ const Register = () => {
           <p className="mt-2.5 sm:mt-3 text-xs sm:text-sm text-gray-700 text-center">
             Already have an account?{" "}
             <span
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/login")}
               className="text-orange-600 font-semibold cursor-pointer hover:underline"
             >
               Login here

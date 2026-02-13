@@ -62,7 +62,7 @@ const Profile = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        navigate("/");
+        navigate("/login");
         return;
       }
 
@@ -261,7 +261,7 @@ const Profile = () => {
 
   const handleLogout = () => {
     localStorage.clear();
-    navigate("/");
+    navigate("/login");
   };
 
   const getStatusIcon = (status) => {

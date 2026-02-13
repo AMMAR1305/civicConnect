@@ -205,7 +205,7 @@ const CitizenDashboard = () => {
 
   const logout = () => {
     localStorage.clear();
-    navigate("/");
+    navigate("/login");
   };
 
   const handleComplaintSuccess = () => {

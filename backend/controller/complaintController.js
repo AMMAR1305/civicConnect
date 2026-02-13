@@ -442,3 +442,109 @@ exports.getComplaintById = async (req, res) => {
   }
 };
 
+// Admin: Update complaint details
+exports.updateComplaint = async (req, res) => {
+  try {
+    console.log('\n📝 === UPDATE COMPLAINT REQUEST ===');
+    console.log('📥 User:', req.user ? `${req.user.Email} (${req.user.Role})` : 'No user');
+    console.log('📥 Complaint ID:', req.params.id);
+    console.log('📥 Update data:', JSON.stringify(req.body, null, 2));
+    
+    if (!req.user) {
+      console.log('❌ No user in request');
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    if (req.user.Role !== "Admin") {
+      console.log(`❌ Unauthorized: ${req.user.Role} (only admins can update complaints)`);
+      return res.status(403).json({ message: "Only administrators can update complaints" });
+    }
+    
+    const complaint = await Complaint.findById(req.params.id);
+    
+    if (!complaint) {
+      console.log('❌ Complaint not found');
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+    
+    // Update allowed fields
+    const allowedUpdates = ['title', 'description', 'category', 'location', 'ward', 'pincode', 'status', 'priority'];
+    const updates = {};
+    
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    });
+    
+    // Add to history if status changed
+    if (updates.status && updates.status !== complaint.status) {
+      complaint.history.push({
+        status: updates.status,
+        updatedAt: new Date()
+      });
+    }
+    
+    // Apply updates
+    Object.assign(complaint, updates);
+    
+    await complaint.save();
+    
+    const updatedComplaint = await Complaint.findById(req.params.id)
+      .populate('citizen', 'Name Email')
+      .populate('assignedOfficer', 'Name Email');
+    
+    console.log('✅ COMPLAINT UPDATED SUCCESSFULLY!');
+    console.log(`   - ID: ${updatedComplaint._id}`);
+    console.log('===============================\n');
+    
+    res.json({ message: "Complaint updated successfully", complaint: updatedComplaint });
+    
+  } catch (error) {
+    console.error('\n❌ === UPDATE COMPLAINT ERROR ===');
+    console.error('Error:', error.message);
+    console.error('===============================\n');
+    res.status(500).json({ message: "Failed to update complaint", error: error.message });
+  }
+};
+
+// Admin: Delete complaint
+exports.deleteComplaint = async (req, res) => {
+  try {
+    console.log('\n🗑️  === DELETE COMPLAINT REQUEST ===');
+    console.log('📥 User:', req.user ? `${req.user.Email} (${req.user.Role})` : 'No user');
+    console.log('📥 Complaint ID:', req.params.id);
+    
+    if (!req.user) {
+      console.log('❌ No user in request');
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    if (req.user.Role !== "Admin") {
+      console.log(`❌ Unauthorized: ${req.user.Role} (only admins can delete complaints)`);
+      return res.status(403).json({ message: "Only administrators can delete complaints" });
+    }
+    
+    const complaint = await Complaint.findById(req.params.id);
+    
+    if (!complaint) {
+      console.log('❌ Complaint not found');
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+    
+    await Complaint.findByIdAndDelete(req.params.id);
+    
+    console.log('✅ COMPLAINT DELETED SUCCESSFULLY!');
+    console.log(`   - ID: ${req.params.id}`);
+    console.log(`   - Title: ${complaint.title}`);
+    console.log('===============================\n');
+    
+    res.json({ message: "Complaint deleted successfully" });
+    
+  } catch (error) {
+    console.error('\n❌ === DELETE COMPLAINT ERROR ===');
+    console.error('Error:', error.message);
+    console.error('===============================\n');
+    res.status(500).json({ message: "Failed to delete complaint", error: error.message });
+  }
+};

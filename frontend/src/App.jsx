@@ -1,5 +1,6 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom'
+import Home from './Pages/Home'
 // import LoginNew from './Pages/LoginNew'
 import Login from './Pages/Login'
 import Register from './Pages/Register'
@@ -19,7 +20,8 @@ import AdminDashboard from "./Pages/AdminDashboard";
 const App = () => {
   return (
     <Routes>
-      <Route path="/" element={<Login />} />
+      <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/citizen" element={<ProtectedRoute role="Citizen"><CitizenDashboard /></ProtectedRoute>} />
       <Route path="/create" element={<ProtectedRoute role="Citizen"><CreateComplaint /></ProtectedRoute>} />
@@ -34,7 +36,7 @@ const App = () => {
       {/* Redirect old route to new route */}
       <Route path="/CitizenDashboard" element={<Navigate to="/citizen" replace />} />
 
-      {/* Catch all - redirect to login */}
+      {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
 
       {/* <Route path="/" element={<LoginNew />} /> */}
