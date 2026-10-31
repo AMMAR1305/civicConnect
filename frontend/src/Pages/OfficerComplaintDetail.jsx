@@ -314,7 +314,7 @@ const OfficerComplaintDetail = () => {
               </h2>
               {complaint.photo ? (
                 <img
-                  src={`http://localhost:4000${complaint.photo}`}
+                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${complaint.photo}`}
                   alt="Complaint Evidence"
                   className="w-full rounded-lg border-2 border-gray-200 shadow-md 
                     hover:shadow-xl transition-shadow"

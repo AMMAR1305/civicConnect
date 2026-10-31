@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../Services/api";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, UserPlus } from "lucide-react";
 import login from "../assets/login.jpeg"
@@ -22,7 +22,7 @@ const Register = () => {
     setType("");
 
     try {
-      await axios.post("http://localhost:4000/auth/register", {
+      await api.post("/auth/register", {
         Name: name,
         Email: email,
         Password: password,

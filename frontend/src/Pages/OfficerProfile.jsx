@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 // Constants
-const API_BASE = "http://localhost:4000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 const PASSWORD_MIN_LENGTH = 6;
 const PASSWORD_STRENGTH_THRESHOLDS = { WEAK: 50, MEDIUM: 75 };
 

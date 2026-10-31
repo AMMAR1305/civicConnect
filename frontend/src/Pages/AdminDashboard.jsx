@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import api from "../Services/api";
 import { useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
@@ -1805,7 +1805,7 @@ const AdminDashboard = () => {
                         </div>
                       )}
                       
-                      {c.image && <div className="mb-3"><LazyImage src={`http://localhost:4000${c.image}`} alt="Complaint" className="w-full h-40 object-cover rounded-lg" loading="lazy" /></div>}
+                      {c.image && <div className="mb-3"><LazyImage src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${c.image}`} alt="Complaint" className="w-full h-40 object-cover rounded-lg" loading="lazy" /></div>}
                       
                       <div className="flex gap-2 pt-3 border-t">
                         <button 

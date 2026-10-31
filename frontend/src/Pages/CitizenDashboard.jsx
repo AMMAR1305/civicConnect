@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../Services/api";
 import { Bell } from "lucide-react";
 import CreateComplaint from "./CreateComplaint";
 import NotificationPanel from "../Components/NotificationPanel";
@@ -53,9 +53,7 @@ const CitizenDashboard = () => {
   const fetchComplaints = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:4000/complaints/my", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get("/complaints/my");
       
       const data = response.data;
       

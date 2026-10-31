@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../Services/api";
 
 const TrackComplaint = () => {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ const TrackComplaint = () => {
   const fetchComplaints = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:4000/complaints/my", {
+      const response = await api.get("/complaints/my", {
         headers: { Authorization: `Bearer ${token}` }
       });
       setComplaints(response.data);
@@ -523,7 +523,7 @@ const TrackComplaint = () => {
                       {complaint.photo && (
                         <div className="mt-4">
                           <img
-                            src={`http://localhost:4000${complaint.photo}`}
+                            src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${complaint.photo}`}
                             alt="Complaint"
                             className="w-full h-40 object-cover rounded-lg border-2 border-gray-200"
                           />
@@ -710,7 +710,7 @@ const TrackComplaint = () => {
                             <span>📷</span> Photo Evidence
                           </h4>
                           <img
-                            src={`http://localhost:4000${selectedComplaint.photo}`}
+                            src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${selectedComplaint.photo}`}
                             alt="Complaint"
                             className="w-full max-h-64 md:max-h-96 object-contain rounded-lg border-4 border-gray-200 shadow-lg"
                           />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../Services/api";
 import { jwtDecode } from "jwt-decode";
 import { 
   Eye, EyeOff, User, Mail, Shield, Calendar, Edit2, Save, X,
@@ -71,7 +71,7 @@ const Profile = () => {
       
       // If Name/Email not in token, fetch from backend
       if (!decoded.Name || !decoded.Email) {
-        const userResponse = await axios.get("http://localhost:4000/auth/me", {
+        const userResponse = await api.get("/auth/me", {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -103,7 +103,7 @@ const Profile = () => {
       }
 
       // Fetch complaint stats
-      const response = await axios.get("http://localhost:4000/complaints/my", {
+      const response = await api.get("/complaints/my", {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -185,7 +185,7 @@ const Profile = () => {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put("http://localhost:4000/auth/update-profile", editData, {
+      const response = await api.put("/auth/update-profile", editData, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -233,7 +233,7 @@ const Profile = () => {
         newPassword: passwordData.newPassword ? "***" : "empty"
       });
       
-      const response = await axios.put("http://localhost:4000/auth/change-password", {
+      const response = await api.put("/auth/change-password", {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword
       }, {

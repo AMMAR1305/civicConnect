@@ -239,8 +239,7 @@ const Home = () => {
                   <Shield className="w-8 h-8 text-slate-900" />
                 </div>
                 <div>
-                  <div className="font-bold text-xl text-white">UrbanResolve</div>
-                  <div className="text-xs text-yellow-400 uppercase tracking-widest">Government of India</div>
+                  <div className="font-bold text-xl text-white">CivicConnect</div>
                 </div>
               </div>
             </div>
@@ -291,12 +290,12 @@ const Home = () => {
           <div className="mb-8">
             <div className="inline-flex items-center bg-yellow-500 text-slate-900 px-4 py-2 rounded-full font-bold text-sm uppercase tracking-widest mb-4">
               <Shield className="w-4 h-4 mr-2" />
-              Official Government Portal
+              Official Civic Portal
             </div>
           </div>
           
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-            <span className="text-slate-900 block mb-2">Government of India</span>
+            <span className="text-slate-900 block mb-2">CivicConnect</span>
             <span className="bg-gradient-to-r from-blue-900 via-indigo-800 to-blue-900 bg-clip-text text-transparent">
               Municipal Services Portal
             </span>
@@ -307,8 +306,8 @@ const Home = () => {
           </p>
           
           <p className="text-base sm:text-lg mb-8 max-w-4xl mx-auto leading-relaxed text-slate-600">
-            An integrated government platform for citizen service delivery featuring real-time complaint management, 
-            SLA-based accountability frameworks, and transparent municipal governance in accordance with Digital India guidelines.
+            A unified civic platform for service delivery featuring real-time complaint management,
+            SLA-based accountability frameworks, and transparent municipal governance.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
@@ -474,9 +473,9 @@ const Home = () => {
       <section id="security" className="py-16 sm:py-20 bg-white border-t-4 border-yellow-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-4xl font-bold mb-6 text-slate-900 uppercase tracking-wide">Government Security Standards</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-6 text-slate-900 uppercase tracking-wide">Security Standards</h2>
             <p className="text-base sm:text-lg max-w-3xl mx-auto text-slate-600">
-              Military-grade security infrastructure compliant with Government of India cybersecurity frameworks and data protection laws.
+              Military-grade security infrastructure designed for secure civic service delivery and data protection.
             </p>
           </div>
           
@@ -501,9 +500,9 @@ const Home = () => {
       <section className="py-16 sm:py-20 bg-gradient-to-br from-slate-100 to-blue-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12 sm:mb-16">
-            <h2 className="text-2xl sm:text-4xl font-bold mb-6 text-slate-900 uppercase tracking-wide">Future Government Initiatives</h2>
+            <h2 className="text-2xl sm:text-4xl font-bold mb-6 text-slate-900 uppercase tracking-wide">Future Civic Initiatives</h2>
             <p className="text-base sm:text-lg max-w-3xl mx-auto text-slate-600">
-              Upcoming digital transformation initiatives aligned with Smart Cities Mission and Digital India 2.0.
+              Upcoming digital transformation initiatives aligned with smart city and municipal modernization programs.
             </p>
           </div>
           
@@ -529,14 +528,14 @@ const Home = () => {
           <div className="mb-8">
             <div className="inline-flex items-center bg-yellow-500 text-slate-900 px-4 py-2 rounded-full font-bold text-sm uppercase tracking-widest mb-6">
               <Shield className="w-4 h-4 mr-2" />
-              Join Digital India
+              Join CivicConnect
             </div>
           </div>
           <h2 className="text-2xl sm:text-4xl font-bold text-white mb-6 uppercase tracking-wide">
-            Transform Municipal Governance Today
+            Transform Municipal Services Today
           </h2>
           <p className="text-base sm:text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
-            Be part of India's digital transformation. Register for transparent, efficient, and accountable government services.
+            Be part of your city's digital transformation. Register for transparent, efficient, and accountable civic services.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button 
@@ -564,13 +563,13 @@ const Home = () => {
                 <Shield className="w-8 h-8 text-slate-900" />
               </div>
               <div className="text-center sm:text-left">
-                <div className="font-bold text-xl uppercase tracking-wide">Government of India</div>
-                <div className="text-yellow-400 text-sm uppercase tracking-widest">UrbanResolve</div>
+                <div className="font-bold text-xl uppercase tracking-wide">CivicConnect</div>
+                <div className="text-yellow-400 text-sm uppercase tracking-widest">Civic services platform</div>
               </div>
             </div>
             <div className="text-center lg:text-right">
-              <div className="text-gray-300 mb-2 text-sm uppercase tracking-wide">© 2026 Digital India Initiative</div>
-              <div className="text-gray-300 text-sm">Serving the Nation with Technology</div>
+              <div className="text-gray-300 mb-2 text-sm uppercase tracking-wide">© 2026 CivicConnect</div>
+              <div className="text-gray-300 text-sm">Serving communities with technology</div>
             </div>
           </div>
         </div>
@@ -607,5 +606,6 @@ const Home = () => {
     </div>
   );
 };
+
 
 export default Home;

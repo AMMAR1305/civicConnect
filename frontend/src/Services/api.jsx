@@ -1,7 +1,10 @@
 import axios from "axios";
 
+const rawBaseURL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const baseURL = rawBaseURL.replace(/\/+$/, "");
+
 const api = axios.create({
-  baseURL: "http://localhost:4000",
+  baseURL,
 });
 
 // Auto attach token for every request

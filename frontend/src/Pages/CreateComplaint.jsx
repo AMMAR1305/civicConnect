@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../Services/api";
 
 const CreateComplaint = ({ isModal = false, onClose = null, onSuccess = null }) => {
     const navigate = useNavigate();
@@ -350,8 +350,6 @@ const CreateComplaint = ({ isModal = false, onClose = null, onSuccess = null }) 
         }
 
         try {
-            const token = localStorage.getItem("token");
-            
             // Create FormData for multipart upload
             const formDataToSend = new FormData();
             formDataToSend.append('title', formData.title);
@@ -381,9 +379,8 @@ const CreateComplaint = ({ isModal = false, onClose = null, onSuccess = null }) 
                 formDataToSend.append('photo', photoFile);
             }
 
-            await axios.post("http://localhost:4000/complaints/createcomplaint", formDataToSend, {
+            await api.post("/complaints/createcomplaint", formDataToSend, {
                 headers: { 
-                    Authorization: `Bearer ${token}`,
                     'Content-Type': 'multipart/form-data'
                 }
             });

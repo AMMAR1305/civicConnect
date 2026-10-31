@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../Services/api";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, UserPlus } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
@@ -32,8 +32,8 @@ const LoginNew = () => {
     setType("");
 
     try {
-      const res = await axios.post(
-        "http://localhost:4000/auth/login",
+      const res = await api.post(
+        "/auth/login",
         {
           Email: email,
           Password: password
@@ -78,7 +78,7 @@ const LoginNew = () => {
     setType("");
 
     try {
-      await axios.post("http://localhost:4000/auth/register", {
+      await api.post("/auth/register", {
         name,
         email: regEmail,
         password: regPassword,

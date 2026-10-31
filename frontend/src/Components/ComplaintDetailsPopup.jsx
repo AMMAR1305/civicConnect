@@ -165,7 +165,7 @@ const ComplaintDetailsPopup = memo(({ complaint, isOpen, onClose, onEdit, onReas
                     </div>
                   )}
                   <img 
-                    src={`http://localhost:4000${complaint.image}`} 
+                    src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${complaint.image}`} 
                     alt="Complaint Evidence" 
                     className={`complaint-image transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                     onLoad={() => setImageLoaded(true)}

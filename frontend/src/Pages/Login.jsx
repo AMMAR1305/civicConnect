@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../Services/api";
 import { useNavigate , Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2, UserPlus } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
@@ -35,8 +35,8 @@ const Login = () => {
     console.log("Attempting login with:", { email, hasPassword: !!password });
 
     try {
-      const res = await axios.post(
-        "http://localhost:4000/auth/login",
+      const res = await api.post(
+        "/auth/login",
         {
           Email: email,
           Password: password
